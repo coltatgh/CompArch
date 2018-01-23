@@ -49,7 +49,7 @@ static const char *opcodes[] = {
 //GLOBAL VARIABLES
 FILE *fileIn;
 FILE *fileOut;
-
+char errorMessage[100];
 
 //FUNCTION PROTOTYPES
 bool isLabelValid(char* label);
@@ -59,14 +59,34 @@ int getOpcode(char* opcode);
 
 
 
+void error(int32_t errorCode, char* extraMessage) {
+  switch(errorCode) {
+    case 0:
+    case 1:
+      printf("ERROR 1: UNDEFINED LABEL\t");
+      break;
+    case 2:
+      printf("ERROR 2: INVALID OPCODE\t");
+      break;
+    case 3:
+      printf("ERROR 3: INVALID CONSTANT\t");
+      break;
+    case 4:
+      printf("ERROR 4: MISCELLANEOUS \t");
+      break;
+    default:
+      break;
+  }
+  if(extraMessage) {
+    printf(extraMessage);
+  }
+  printf("\n");
+  //exit(errorCode);
+}
 
-// static const char* opcodes[] = {"ADD", "AND", "BR", "BRn", "BRz", "BRp", "BRnz", "BRnp", "BRzp", "BRnzp", "HALT", "JMP", "JSR", "JSRR", "LDB", "LDW", "LEA", "NOP", "NOT", "RET", "LSHF", "RSHFL", "RSHFA", "RTI", "STB", "STW", "TRAP", "XOR"};
 
-// enum OPCODE {
-// 	ADD, AND, BR, BR_N, BR_Z, BR_P, BR_NZ, BR_NP, BR_ZP, BR_NZP, HALT, JMP, JSR, JSRR, LDB, LDW, LEA, NOP, NOT, RET, LSHF, RSHFL, RSHFA, RTI, STB, STW, TRAP, XOR
-// }
 
-void main_testLabel(void) {
+void main(void) {
 	char* label1 = "AND";
 	char* label2 = "$AND1";
 	char* label3 = "AND1";
@@ -91,18 +111,19 @@ void main_testOutput(void) {
 	output(0);
 }
 
-void main_testIO(int32_t argc, char* argv[]) {
-	int i;
-  if(argc == 3) {
-    fileIn = fopen(argv[1], "r");
-    fileOut = fopen(argv[2], "w");
-  } else {
-    perror("expected ./assemble <input.asm> <output.obj>\n");
-  }
-  main_testOutput();
-  fclose(fileIn);
-  fclose(fileOut);
-}
+// void main_testIO(int32_t argc, char* argv[]) {
+// 	int i;
+//   if(argc == 3) {
+//     fileIn = fopen(argv[1], "r");
+//     fileOut = fopen(argv[2], "w");
+//   } else {
+//     error(4, "")
+//     printf("expected ./assemble <input.asm> <output.obj>\n");
+//   }
+//   main_testOutput();
+//   fclose(fileIn);
+//   fclose(fileOut);
+// }
 
 /*
 Checks what is expected to be a label. This is used in the first pass, before storing a label in the label map.
@@ -123,6 +144,8 @@ bool isLabelValid(char* label) {
     while(label[i] != NULL) {
       if(!isalnum(label[i])) {
         valid = false;
+        sprintf(errorMessage, "label %s is not alphanumeric", label);
+        error(1, errorMessage);
         break;
       }
       i++;
@@ -130,6 +153,8 @@ bool isLabelValid(char* label) {
   }
   if(strcmp("IN", label) == 0 || strcmp("OUT", label) == 0 || strcmp("GETC", label) == 0 || strcmp("PUTS", label) == 0) {
     valid = false;
+    sprintf(errorMessage, "label %s is an opcode", label);
+    error(1, errorMessage);
   }
   return valid;
 }
