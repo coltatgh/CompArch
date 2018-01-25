@@ -178,7 +178,9 @@ void main_TestParse1(void) {
   printf("DEC\n%d %d %d %d", decToInt("#-1000"), decToInt("x8909"), decToInt("#1000"), decToInt("#65000"));
 }
 
-
+int labelToLiteral(char* label) {
+  //TODO: FETCH OFFSET VALUE FROM LABEL
+}
 
 /*
 By the time this function is called the user is certain that the literal token is a numeric literal.
@@ -271,8 +273,27 @@ void main(int32_t argc, char* argv[]) {
         } else {
           result += RegisterToInt(c);
         }
-        break;   
-      //TODO: BR goes to labels which have been generated in the first pass  
+        break;  
+      case BR:
+      case BRN:
+      case BRZ:
+      case BRP:
+      case BRNZ:
+      case BRNP:
+      case BRZP:
+      case BRNZP:
+        a = strtok(NULL, delimiters);
+        result += labelToLiteral(a);
+        if(opcode = BRN || opcode == BRNZ || opcode == BRNP || opcode == BRNZP || opcode == BR) {
+          result += (1<<11);
+        }
+        if (opcode = BRZ || opcode == BRNZ || opcode == BRZP || opcode == BRNZP || opcode == BR) {
+          result += (1<<10);
+        }
+        if(opcode = BRP || opcode == BRZP || opcode == BRNP || opcode == BRNZP || opcode == BR) {
+          result += (1<<9);
+        }
+      break;
       case JMP:
       case JSRR:
         a = strtok(NULL, delimiters);
