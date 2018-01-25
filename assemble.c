@@ -228,6 +228,7 @@ bool isLiteral(char* literal) {
   return (literal[0] == 'x' || literal[0] == '#');
 }
 
+
 void main(int32_t argc, char* argv[]) {
   int i;
   if(argc == 3) {
@@ -243,9 +244,9 @@ void main(int32_t argc, char* argv[]) {
   char *token = malloc(10);
   char *string;
   char *delimiters = ", \t\n";
-  char *sr1 = malloc(10);
-  char *sr2 = malloc(10);
-  char *dr = malloc(10);
+  char *b = malloc(10);
+  char *c = malloc(10);
+  char *a = malloc(10);
 
   line_size = getline(&string, &line_buf_size, fileIn);
   string[strlen(string) - 1] = '\0'; // getline adds a newline character after the string. remove that.
@@ -256,20 +257,64 @@ void main(int32_t argc, char* argv[]) {
     result = opcodeToASM(opcode);
     switch(opcode) {
       case ADD:
-        dr = strtok(NULL, delimiters);
-        result += (RegisterToInt(dr) << 9);
-        sr1 = strtok(NULL, delimiters);
-        result += (RegisterToInt(sr1) << 6);
-        sr2 = strtok(NULL, delimiters);
+      case AND:
+        a = strtok(NULL, delimiters);
+        result += (RegisterToInt(a) << 9);
+        b = strtok(NULL, delimiters);
+        result += (RegisterToInt(b) << 6);
+        c = strtok(NULL, delimiters);
 
-        printf("%s %s %s\n", dr, sr1, sr2);
-        if(isLiteral(sr2)) {
-          result += toLiteral(sr2, 5, SIGNED);
+        printf("%s %s %s\n", a, b, c);
+        if(isLiteral(c)) {
+          result += toLiteral(c, 5, SIGNED);
           result += 1<<5;
         } else {
-          result += RegisterToInt(sr2);
+          result += RegisterToInt(c);
         }
-        break;        
+        break;   
+      //TODO: BR goes to labels which have been generated in the first pass  
+      case JMP:
+      case JSRR:
+        a = strtok(NULL, delimiters);
+        result += (RegisterToInt(a) << 6);
+        break;
+      case JSR:
+        result += 1<<11;
+        //TODO: LABEL
+        break;
+      case LDB:
+      case LDW:
+      case STB:
+      case STW:
+        a = strtok(NULL, delimiters);
+        result += (RegisterToInt(a) << 9);
+        b = strtok(NULL, delimiters);
+        result += (RegisterToInt(b) << 6);
+        c = strtok(NULL, delimiters);
+        result += toLiteral(c,6,SIGNED);  //unsure if difference b/t STB/STW & LDB/LDW (left shift 1 bit) is @ compile time or runtime? 
+        break;
+      case LEA:
+        a = strtok(NULL, delimiters);
+        result += (RegisterToInt(a) << 9);
+        b = strtok(NULL, delimiters);
+        //TODO: b is label
+        break;
+      case NOT:        
+        a = strtok(NULL, delimiters);
+        result += (RegisterToInt(a) << 9);
+        b = strtok(NULL, delimiters);
+        result += (RegisterToInt(b) << 6);
+        result += 0x3F;
+        break;
+      case RET:
+        result += 7<<6;
+        break;
+      case RTI:
+        //RTI is just the opcode and all 0s after that, so nothing extra needed
+        break;
+      case SHF:
+      
+        break;
       default:
         sprintf(errorMessage, "1st token = %s", token);
         break;
