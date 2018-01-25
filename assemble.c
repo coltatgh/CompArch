@@ -312,8 +312,37 @@ void main(int32_t argc, char* argv[]) {
       case RTI:
         //RTI is just the opcode and all 0s after that, so nothing extra needed
         break;
-      case SHF:
-      
+      case LSHF:
+      case RSHFL:
+      case RSHFA:
+        a = strtok(NULL, delimiters);
+        result += (RegisterToInt(a) << 9);
+        b = strtok(NULL, delimiters);
+        result += (RegisterToInt(b) << 6);
+        c = strtok(NULL, delimiters);
+        result += toLiteral(c, 4, UNSIGNED);
+        if(opcode == RSHFL) {
+          result += (1<<4);
+        } else if (opcode == RSHFA) {
+          result += (3<<4);
+        }
+        break;
+      case TRAP:
+        a = strtok(NULL, delimiters);
+        result += toLiteral(a, 8, UNSIGNED);
+        break;
+      case XOR:
+        a = strtok(NULL, delimiters);
+        result += (RegisterToInt(a) << 9);
+        b = strtok(NULL, delimiters);
+        result += (RegisterToInt(b) << 6);
+        c = strtok(NULL, delimiters);
+        if(isLiteral(c)) {
+          result += toLiteral(c, 5, SIGNED);
+          result += 1<<6;
+        } else {
+          result += RegisterToInt(c);
+        }
         break;
       default:
         sprintf(errorMessage, "1st token = %s", token);
