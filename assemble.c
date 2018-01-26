@@ -130,6 +130,8 @@ int hexToInt(char* hex);
 int decToInt(char* dec);
 uint16_t opcodeToASM(enum OPCODE opcode);
 uint16_t RegisterToInt(char* reg);
+void main_1stPass(void);
+void main_2ndPass(void);
 
 void error(int32_t errorCode, char* extraMessage) {
   printf("\nLINE #%d\t", lineNumber);
@@ -178,7 +180,7 @@ void addLabel(char* label, int offset) {
       labelTableMaxLength *= 2;
     }
   }
-  memcpy(labelTable + labelTableLength, &newLabel, sizeof(struct Label));
+  memcpy(labelTable + labelTableLength, newLabel, sizeof(struct Label));
   labelTableLength++;
   free(newLabel);
 }
@@ -186,7 +188,7 @@ void addLabel(char* label, int offset) {
 uint16_t labelToLiteral(char* label) {
   int i;
   struct Label l;
-  uint16_t result = -1;
+  int result = -1;
   for(i = 0; i < labelTableLength; i++) {
     l = labelTable[i];
     if(strcmp(label, l.name) == 0) {  //CASE SENSITIVE?
@@ -197,41 +199,7 @@ uint16_t labelToLiteral(char* label) {
   if(result == -1) {
     error(1,label);
   }
-  return result;
-}
-
-void main_firstPass(void) {
-  //
-
-}
-
-void main_testLabel(void) {
-	char* label1 = "AND";
-	char* label2 = "$AND1";
-	char* label3 = "AND1";
-	char* label4 = "PUTS";
-	printf("%d %d %d %d", isLabelValid(label1), isLabelValid(label2), isLabelValid(label3), isLabelValid(label4));
-}
-
-
-void main_testGetOpcode(void) {
-	char* opcode1 = "AND";
-	char* opcode2 = "BRNZP";
-	char* opcode3 = "LEL";
-	char* opcode4 = "HALT";
-	printf("%d %d %d %d", getOpcode(opcode1), getOpcode(opcode2), getOpcode(opcode3), getOpcode(opcode4));
-}
-
-void main_TestParse1(void) {
-  char* pOp1 = ".ORIG";
-  char* pOp2 = ".FILL";
-  char* pOp3 = ".END";
-  char* pOp4 = "HALT";
-  printf("PSEUDO\n%d %d %d %d", getPseudoOp(pOp1), getPseudoOp(pOp2), getPseudoOp(pOp3), getPseudoOp(pOp4));
-
-  printf("HEX\n%d %d %d %d", hexToInt("x-1000"), hexToInt("a8909"), hexToInt("xBEEF"), hexToInt("xBEEFF"));
-
-  printf("DEC\n%d %d %d %d", decToInt("#-1000"), decToInt("x8909"), decToInt("#1000"), decToInt("#65000"));
+  return (uint16_t) result;
 }
 
 /*
@@ -282,7 +250,6 @@ bool isLiteral(char* literal) {
   return (literal[0] == 'x' || literal[0] == '#');
 }
 
-
 void main(int32_t argc, char* argv[]) {
   int i;
   if(argc == 3) {
@@ -292,7 +259,46 @@ void main(int32_t argc, char* argv[]) {
     error(4, "");
     printf("expected ./assemble <input.asm> <output.obj>\n");
   }
+  main_1stPass();
+  fclose(fileIn);
+  fileIn = fopen(argv[1], "r");
+  main_2ndPass();
+}
 
+void handleComments(char* string) {
+  char *comment = strchr(string, ';');
+  if(comment != NULL) {
+    strncpy(string, string, strlen(string) - strlen(comment)); //remove any comment
+  }
+}
+
+void main_1stPass(void) {
+  ssize_t line_size = 0;
+  ssize_t line_buf_size = 0;
+  char *token = malloc(10);
+  char *string;
+  char *delimiters = " \t\n";
+
+  line_size = getline(&string, &line_buf_size, fileIn);
+  string[strlen(string) - 1] = '\0'; // getline adds a newline character after the string. remove that.
+  handleComments(string);
+  while(line_size != -1) {
+    if(strlen(string) == 0) {
+      continue; // SKIP iter for any All Comment lines
+    }
+    token = strtok(string, delimiters);
+    if(isLabelValid(token)) {
+      addLabel(token, 1); //TODO: FIGURE OUT WHAT CONSTANT TO ADD !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      printf("ADDED LABEL: %s %d\n", token, labelToLiteral(token));
+    }
+    line_size = getline(&string, &line_buf_size, fileIn);
+    string[strlen(string) - 1] = '\0'; // getline adds a newline character after the string. remove that.
+    handleComments(string);
+  }
+}
+
+
+void main_2ndPass(void) {
   ssize_t line_size = 0;
   ssize_t line_buf_size = 0;
   char *token = malloc(10);
@@ -304,7 +310,11 @@ void main(int32_t argc, char* argv[]) {
 
   line_size = getline(&string, &line_buf_size, fileIn);
   string[strlen(string) - 1] = '\0'; // getline adds a newline character after the string. remove that.
+  handleComments(string);
   while(line_size != -1) {
+    if(strlen(string) == 0) {
+      continue; // SKIP iter for any All Comment lines
+    }
     result = 0;
     token = strtok(string, delimiters);
     enum OPCODE opcode = getOpcode(token);
@@ -381,7 +391,8 @@ void main(int32_t argc, char* argv[]) {
         result += 7<<6;
         break;
       case RTI:
-        //RTI is just the opcode and all 0s after that, so nothing extra needed
+      case NOP:
+        //RTI & NOP is just the opcode and all 0s after that, so nothing extra needed
         break;
       case LSHF:
       case RSHFL:
@@ -421,6 +432,7 @@ void main(int32_t argc, char* argv[]) {
     }
     output(result);
     line_size = getline(&string, &line_buf_size, fileIn);
+    handleComments(string);
     lineNumber++;
   }
   free(string);
@@ -499,6 +511,9 @@ bool isLabelValid(char* label) {
     valid = false;
     sprintf(errorMessage, "label %s is an opcode", label);
     error(1, errorMessage);
+  }
+  if(getOpcode(label) != -1) {
+    valid = false;
   }
   return valid;
 }
