@@ -32,6 +32,7 @@
         OPCODE(JSRR)   \
         OPCODE(LDB)   \
         OPCODE(LDW)   \
+        OPCODE(LSHF)  \
         OPCODE(LEA)   \
         OPCODE(NOP)   \
         OPCODE(NOT)   \
@@ -85,7 +86,8 @@ static const uint8_t opcodeMap[] = {
     4,    //OPCODE(JSRR)   
     2,    //OPCODE(LDB)   
     4,    //OPCODE(LDW)   
-    14,    //OPCODE(LEA)   
+    14,    //OPCODE(LEA)
+    13,    //OPCODE(LSHF)   
     0,    //OPCODE(NOP)   
     9,    //OPCODE(NOT)   
     12,    //OPCODE(RET)   
@@ -97,7 +99,6 @@ static const uint8_t opcodeMap[] = {
     15,    //OPCODE(TRAP)   
     9    //OPCODE(XOR)   
 };
-
 //end SOURCE1
 
 //GLOBAL VARIABLES
@@ -106,6 +107,19 @@ FILE *fileOut = NULL;
 char errorMessage[120];
 uint32_t lineNumber = 1;
 uint16_t result = 0;
+struct Label* labelTable = NULL;
+
+/*
+LABEL TABEL
+GENERATED ON THE FIRST PASS OF THE ANALYSIS/PARSER
+USED ON THE SECOND PASS
+*/
+static int labelTableLength = 0;
+static int labelTableMaxLength = 0;
+struct Label {
+  char* name;
+  uint16_t offset;
+};
 
 //FUNCTION PROTOTYPES
 bool isLabelValid(char* label);
@@ -149,6 +163,48 @@ void error(int32_t errorCode, char* extraMessage) {
   // exit(errorCode);
 }
 
+void addLabel(char* label, int offset) {
+  struct Label *newLabel;
+  newLabel = malloc(sizeof(struct Label));
+  newLabel->name = malloc(strlen(label));
+  strcpy(newLabel->name, label);
+  newLabel->offset = offset;
+  if(labelTableLength >= labelTableMaxLength) {
+    if(labelTableLength == 0) {
+      labelTable = malloc(10*sizeof(struct Label));
+      labelTableMaxLength = 10;
+    } else {
+      labelTable = realloc(labelTable, 2*labelTableMaxLength*sizeof(struct Label));
+      labelTableMaxLength *= 2;
+    }
+  }
+  memcpy(labelTable + labelTableLength, &newLabel, sizeof(struct Label));
+  labelTableLength++;
+  free(newLabel);
+}
+
+uint16_t labelToLiteral(char* label) {
+  int i;
+  struct Label l;
+  uint16_t result = -1;
+  for(i = 0; i < labelTableLength; i++) {
+    l = labelTable[i];
+    if(strcmp(label, l.name) == 0) {  //CASE SENSITIVE?
+      result = l.offset;
+      break;
+    }
+  }
+  if(result == -1) {
+    error(1,label);
+  }
+  return result;
+}
+
+void main_firstPass(void) {
+  //
+
+}
+
 void main_testLabel(void) {
 	char* label1 = "AND";
 	char* label2 = "$AND1";
@@ -176,10 +232,6 @@ void main_TestParse1(void) {
   printf("HEX\n%d %d %d %d", hexToInt("x-1000"), hexToInt("a8909"), hexToInt("xBEEF"), hexToInt("xBEEFF"));
 
   printf("DEC\n%d %d %d %d", decToInt("#-1000"), decToInt("x8909"), decToInt("#1000"), decToInt("#65000"));
-}
-
-int labelToLiteral(char* label) {
-  //TODO: FETCH OFFSET VALUE FROM LABEL
 }
 
 /*
@@ -265,8 +317,6 @@ void main(int32_t argc, char* argv[]) {
         b = strtok(NULL, delimiters);
         result += (RegisterToInt(b) << 6);
         c = strtok(NULL, delimiters);
-
-        printf("%s %s %s\n", a, b, c);
         if(isLiteral(c)) {
           result += toLiteral(c, 5, SIGNED);
           result += 1<<5;
