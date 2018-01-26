@@ -1,5 +1,9 @@
 /*
-1st pass converts everything into uppercase? 
+WHOLE ASSEMBLY PROCESS IS CASE INSENSITIVE
+
+LABEL VALUES = offset/2 (because 16bit addressable)
+
+
 */
 
 #include <string.h>
@@ -105,9 +109,12 @@ static const uint8_t opcodeMap[] = {
 FILE *fileIn = NULL;
 FILE *fileOut = NULL;
 char errorMessage[120];
-uint32_t lineNumber = 1;
+uint32_t lineNumber = 0;
+uint16_t startAddress = 0;
 uint16_t result = 0;
 struct Label* labelTable = NULL;
+bool originFound = false;
+char *token = malloc(10);
 
 /*
 LABEL TABEL
@@ -132,6 +139,8 @@ uint16_t opcodeToASM(enum OPCODE opcode);
 uint16_t RegisterToInt(char* reg);
 void main_1stPass(void);
 void main_2ndPass(void);
+void verifyOriginFound(void);
+char* strtok_r(char* string, char* delimiters);
 
 void error(int32_t errorCode, char* extraMessage) {
   printf("\nLINE #%d\t", lineNumber);
@@ -156,13 +165,45 @@ void error(int32_t errorCode, char* extraMessage) {
     printf("%s",extraMessage);
   }
   printf("\n");
-  // if(fileOut != NULL) {
-  //   fclose(fileOut);
-  // }
-  // fileOut = fopen("out.obj", "w"); //TODO: change to non-magic string
-  // fputs("", fileOut); //clear contents of the output file if there is an error
-  // fclose(fileOut);
-  // exit(errorCode);
+  if(fileOut != NULL) {
+    fclose(fileOut);
+  }
+  fileOut = fopen("out.obj", "w"); //TODO: change to non-magic string
+  fputs("", fileOut); //clear contents of the output file if there is an error
+  fclose(fileOut);
+  exit(errorCode);
+}
+
+void verifyOriginFound(void) {
+  if(!originFound) {
+    error(4, "NON-TRIVIAL LINE BEFORE .ORIG");
+  }
+}
+
+bool isPsuedoOp(char* label) {
+  bool pOp = false;
+  if(label[0] == '.') {
+    int i = 0;
+    while(pseudoOps[i] != NULL) {
+      if(strcmp(label+1, pseudoOps[i]) == 0) {
+        pOp = true;
+      }
+    }
+  }
+  return pOp;
+}
+
+int getPseudoOp(char* label) {
+  int pOp = -1;
+  if(label[0] == '.') {
+    int i = 0;
+    while(pseudoOps[i] != NULL) {
+      if(strcmp(label+1, pseudoOps[i]) == 0) {
+        pOp = i;
+      }
+    }
+  }
+  return pOp;
 }
 
 void addLabel(char* label, int offset) {
@@ -191,12 +232,12 @@ uint16_t labelToLiteral(char* label) {
   int result = -1;
   for(i = 0; i < labelTableLength; i++) {
     l = labelTable[i];
-    if(strcmp(label, l.name) == 0) {  //CASE SENSITIVE?
+    if(strcmp(label, l.name) == 0) {
       result = l.offset;
       break;
     }
   }
-  if(result == -1) {
+  if(result == -1) {  //TODO: error is either too premature or need to call differently in 1st pass
     error(1,label);
   }
   return (uint16_t) result;
@@ -262,6 +303,7 @@ void main(int32_t argc, char* argv[]) {
   main_1stPass();
   fclose(fileIn);
   fileIn = fopen(argv[1], "r");
+  lineNumber = 0;
   main_2ndPass();
 }
 
@@ -275,7 +317,6 @@ void handleComments(char* string) {
 void main_1stPass(void) {
   ssize_t line_size = 0;
   ssize_t line_buf_size = 0;
-  char *token = malloc(10);
   char *string;
   char *delimiters = " \t\n";
 
@@ -287,23 +328,65 @@ void main_1stPass(void) {
       continue; // SKIP iter for any All Comment lines
     }
     token = strtok(string, delimiters);
-    if(isLabelValid(token)) {
-      addLabel(token, 1); //TODO: FIGURE OUT WHAT CONSTANT TO ADD !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      printf("ADDED LABEL: %s %d\n", token, labelToLiteral(token));
+    if(isPsuedoOp(token)) {
+      int pOp = getPseudoOp(token);
+      switch(pOp) {
+        case ORIG:
+          if(originFound) {
+            error(4, "duplicate .ORIG");
+          } else {
+            originFound = true;
+          }
+          break;
+        case FILL:
+          verifyOriginFound();
+          break;
+        case END:
+          if(!originFound) {
+            error(4, "NON-TRIVIAL LINE BEFORE .ORIG");
+          }
+          free(string);
+          fclose(fileOut);
+          return;
+          break;
+        default:
+          break;
+      }
+    } else if (getOpcode(token) != -1) { //is an opcode
+      verifyOriginFound();
+    } else if(isLabelValid(token)) {
+      verifyOriginFound();
+      addLabel(token, lineNumber + startAddress);
+      printf("ADDED LABEL: %s %d\n", token, labelToLiteral(token) + startAddress);    //DEBUG      
     }
+    lineNumber++;
     line_size = getline(&string, &line_buf_size, fileIn);
     string[strlen(string) - 1] = '\0'; // getline adds a newline character after the string. remove that.
     handleComments(string);
   }
+  error(4, "NO .END");
 }
 
+char* strtok_r(char* string, char* delimiters) {
+  token = strtok(string, delimiters);
+  int i = 0;
+  for(i = 0; i < strlen(token); i++) {
+    token[i] == toUpper(token[i]);
+  }
+  return token;
+}
 
+/*
+all pseudo-op/orig/end formatting is handled, I just need to have the line start counting from where
+.ORIG is and handle .END/.FILL
+*/
 void main_2ndPass(void) {
   ssize_t line_size = 0;
   ssize_t line_buf_size = 0;
-  char *token = malloc(10);
   char *string;
-  char *delimiters = ", \t\n";
+  char *delimiters = " ,\t\n";
+  char *operatorDelimiters = " \t\n";   // operators can't be separated by comma
+  char *operandDelimiters = " ,\t\n";   // unsure how operands can be separated? Does it require a comma between? 
   char *b = malloc(10);
   char *c = malloc(10);
   char *a = malloc(10);
@@ -317,6 +400,41 @@ void main_2ndPass(void) {
     }
     result = 0;
     token = strtok(string, delimiters);
+    if(isPsuedoOp(token)) {
+      int pOp = getPseudoOp(token);
+      switch(pOp) {
+        case ORIG:
+          if(!originFound) {
+            token = strtok(NULL, delimiters);
+            startAddress = toLiteral(token, 16, UNSIGNED);
+            output(startAddress);
+            originFound = true;
+          }
+          break;
+        case FILL:
+          token = strtok(NULL, delimiters);
+          uint16_t fillValue = toLiteral(token, 9, UNSIGNED);
+          output(fillValue);
+          break;
+        case END:
+          return;
+          break;
+        default:
+          break;
+      }
+      token = strtok(NULL, delimiters);
+      if(token != NULL) {
+        sprintf(errorMessage, "Unexpected operand %s after pseudoOp on line %d", token, lineNumber);
+        error(4, errorMessage);
+      }
+      lineNumber++;
+      continue; // skip to next line after pseudo OP
+    } else if(!originFound) {
+        error(4, "NON-TRIVIAL LINE BEFORE .ORIG");
+    } else if(isLabelValid(token)) {
+      token = strtok(NULL, delimiters); // if first token is a label & it's registered, skip to the next token
+    }
+
     enum OPCODE opcode = getOpcode(token);
     result = opcodeToASM(opcode);
     switch(opcode) {
@@ -353,6 +471,7 @@ void main_2ndPass(void) {
         if(opcode = BRP || opcode == BRZP || opcode == BRNP || opcode == BRNZP || opcode == BR) {
           result += (1<<9);
         }
+        result += labelToLiteral(a);
       break;
       case JMP:
       case JSRR:
@@ -437,6 +556,7 @@ void main_2ndPass(void) {
   }
   free(string);
   fclose(fileOut);
+  error(4, "NO .END");
 }
 
 void main_testOutput(void) {
@@ -462,24 +582,24 @@ void main_testIO(int32_t argc, char* argv[]) {
 /*
 returns the enum for the pseudoOp if it is one, else -1
 */
-int getPseudoOp(char* pseudoOp) {
-  int code = -1;
-  int i = 0;
-  if(pseudoOp[0] != '.') {
-    sprintf(errorMessage, "%s is not a valid pseudoOp", pseudoOp);
-    error(2, errorMessage);
-  } else {
-    pseudoOp+=1; // skip the "."
-    while(pseudoOps[i] != NULL) {
-      if(strcmp(pseudoOps[i], pseudoOp) == 0) {
-        code = i;
-        break;
-      } 
-      i++;
-    }
-  }
-  return code;
-}
+// int getPseudoOp(char* pseudoOp) {
+//   int code = -1;
+//   int i = 0;
+//   if(pseudoOp[0] != '.') {
+//     sprintf(errorMessage, "%s is not a valid pseudoOp", pseudoOp);
+//     error(2, errorMessage);
+//   } else {
+//     pseudoOp+=1; // skip the "."
+//     while(pseudoOps[i] != NULL) {
+//       if(strcmp(pseudoOps[i], pseudoOp) == 0) {
+//         code = i;
+//         break;
+//       } 
+//       i++;
+//     }
+//   }
+//   return code;
+// }
 
 /*
 Checks what is expected to be a label. This is used in the first pass, before storing a label in the label map.
@@ -517,6 +637,7 @@ bool isLabelValid(char* label) {
   }
   return valid;
 }
+
 
 /*
 Looks up what is expected to be an opcode in the opcode library.
