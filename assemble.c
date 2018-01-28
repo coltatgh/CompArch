@@ -3,7 +3,11 @@ WHOLE ASSEMBLY PROCESS IS CASE INSENSITIVE
 
 LABEL VALUES = offset/2 (because 16bit addressable)
 
+RENAME labeltable.offset to line# 
 
+
+
+result += offset = currentLine - labelLine
 */
 
 #include <string.h>
@@ -114,7 +118,7 @@ uint16_t startAddress = 0;
 uint16_t result = 0;
 struct Label* labelTable = NULL;
 bool originFound = false;
-char *token = malloc(10);
+char *token;
 
 /*
 LABEL TABEL
@@ -125,7 +129,7 @@ static int labelTableLength = 0;
 static int labelTableMaxLength = 0;
 struct Label {
   char* name;
-  uint16_t offset;
+  uint16_t line;
 };
 
 //FUNCTION PROTOTYPES
@@ -140,7 +144,7 @@ uint16_t RegisterToInt(char* reg);
 void main_1stPass(void);
 void main_2ndPass(void);
 void verifyOriginFound(void);
-char* strtok_r(char* string, char* delimiters);
+char* getToken(char* string, char* delimiters);
 
 void error(int32_t errorCode, char* extraMessage) {
   printf("\nLINE #%d\t", lineNumber);
@@ -165,13 +169,13 @@ void error(int32_t errorCode, char* extraMessage) {
     printf("%s",extraMessage);
   }
   printf("\n");
-  if(fileOut != NULL) {
-    fclose(fileOut);
-  }
-  fileOut = fopen("out.obj", "w"); //TODO: change to non-magic string
-  fputs("", fileOut); //clear contents of the output file if there is an error
-  fclose(fileOut);
-  exit(errorCode);
+  // if(fileOut != NULL) {
+  //   fclose(fileOut);
+  // }
+  // fileOut = fopen("out.obj", "w"); //TODO: change to non-magic string
+  // fputs("", fileOut); //clear contents of the output file if there is an error
+  // fclose(fileOut);
+  // exit(errorCode);
 }
 
 void verifyOriginFound(void) {
@@ -187,7 +191,9 @@ bool isPsuedoOp(char* label) {
     while(pseudoOps[i] != NULL) {
       if(strcmp(label+1, pseudoOps[i]) == 0) {
         pOp = true;
+        break;
       }
+      i++;
     }
   }
   return pOp;
@@ -200,18 +206,24 @@ int getPseudoOp(char* label) {
     while(pseudoOps[i] != NULL) {
       if(strcmp(label+1, pseudoOps[i]) == 0) {
         pOp = i;
+        break;
       }
+      i++;
     }
+  }
+  if(pOp == -1) {
+    sprintf(errorMessage, "%s is not a valid pseudoOp", label);
+    error(4, errorMessage);
   }
   return pOp;
 }
 
-void addLabel(char* label, int offset) {
+void addLabel(char* label, int line) {
   struct Label *newLabel;
   newLabel = malloc(sizeof(struct Label));
   newLabel->name = malloc(strlen(label));
   strcpy(newLabel->name, label);
-  newLabel->offset = offset;
+  newLabel->line = line;
   if(labelTableLength >= labelTableMaxLength) {
     if(labelTableLength == 0) {
       labelTable = malloc(10*sizeof(struct Label));
@@ -233,7 +245,7 @@ uint16_t labelToLiteral(char* label) {
   for(i = 0; i < labelTableLength; i++) {
     l = labelTable[i];
     if(strcmp(label, l.name) == 0) {
-      result = l.offset;
+      result = l.line;
       break;
     }
   }
@@ -252,7 +264,7 @@ int toLiteral(char* literal, uint8_t maxBits, bool isSigned) {
   int i;
   int max = 1 << maxBits;
   bool throwError = false;
-  if(literal[0] == 'x') {
+  if(literal[0] == 'X') {
     num = hexToInt(literal+1); //skip the x
   } else if (literal[0] == '#') {
     num = decToInt(literal+1);
@@ -282,17 +294,19 @@ int toLiteral(char* literal, uint8_t maxBits, bool isSigned) {
   if(throwError) {
     error(3, errorMessage);
   }
+  return num;
 }
 
 /*
 call to distinguish between literal and register for Opcodes with options for either
 */
 bool isLiteral(char* literal) {
-  return (literal[0] == 'x' || literal[0] == '#');
+  return (literal[0] == 'X' || literal[0] == '#');
 }
 
 void main(int32_t argc, char* argv[]) {
   int i;
+  token = malloc(10);
   if(argc == 3) {
     fileIn = fopen(argv[1], "r");
     fileOut = fopen(argv[2], "w");
@@ -301,16 +315,19 @@ void main(int32_t argc, char* argv[]) {
     printf("expected ./assemble <input.asm> <output.obj>\n");
   }
   main_1stPass();
+  originFound = false;
   fclose(fileIn);
   fileIn = fopen(argv[1], "r");
   lineNumber = 0;
-  main_2ndPass();
+  main_2ndPass();  
+  fclose(fileOut);
 }
+
 
 void handleComments(char* string) {
   char *comment = strchr(string, ';');
   if(comment != NULL) {
-    strncpy(string, string, strlen(string) - strlen(comment)); //remove any comment
+    string[strlen(string) - strlen(comment)] = '\0'; 
   }
 }
 
@@ -320,14 +337,17 @@ void main_1stPass(void) {
   char *string;
   char *delimiters = " \t\n";
 
+
+  line_size = 0;
   line_size = getline(&string, &line_buf_size, fileIn);
   string[strlen(string) - 1] = '\0'; // getline adds a newline character after the string. remove that.
   handleComments(string);
   while(line_size != -1) {
+
     if(strlen(string) == 0) {
-      continue; // SKIP iter for any All Comment lines
+      goto endFirst; // SKIP iter for any All Comment lines
     }
-    token = strtok(string, delimiters);
+    token = getToken(string, delimiters);
     if(isPsuedoOp(token)) {
       int pOp = getPseudoOp(token);
       switch(pOp) {
@@ -342,11 +362,7 @@ void main_1stPass(void) {
           verifyOriginFound();
           break;
         case END:
-          if(!originFound) {
-            error(4, "NON-TRIVIAL LINE BEFORE .ORIG");
-          }
-          free(string);
-          fclose(fileOut);
+          verifyOriginFound();
           return;
           break;
         default:
@@ -356,9 +372,12 @@ void main_1stPass(void) {
       verifyOriginFound();
     } else if(isLabelValid(token)) {
       verifyOriginFound();
-      addLabel(token, lineNumber + startAddress);
+      addLabel(token, (lineNumber-1) + startAddress);
       printf("ADDED LABEL: %s %d\n", token, labelToLiteral(token) + startAddress);    //DEBUG      
     }
+
+    endFirst:
+
     lineNumber++;
     line_size = getline(&string, &line_buf_size, fileIn);
     string[strlen(string) - 1] = '\0'; // getline adds a newline character after the string. remove that.
@@ -367,11 +386,14 @@ void main_1stPass(void) {
   error(4, "NO .END");
 }
 
-char* strtok_r(char* string, char* delimiters) {
+char* getToken(char* string, char* delimiters) {
   token = strtok(string, delimiters);
   int i = 0;
   for(i = 0; i < strlen(token); i++) {
-    token[i] == toUpper(token[i]);
+    if(token[i] >= 'a' && token[i] <= 'z') {
+      token[i] -= 'a' - 'A';
+    }
+    //token[i] == toUpper(token[i]);
   }
   return token;
 }
@@ -383,7 +405,7 @@ all pseudo-op/orig/end formatting is handled, I just need to have the line start
 void main_2ndPass(void) {
   ssize_t line_size = 0;
   ssize_t line_buf_size = 0;
-  char *string;
+  char *string = malloc(255);
   char *delimiters = " ,\t\n";
   char *operatorDelimiters = " \t\n";   // operators can't be separated by comma
   char *operandDelimiters = " ,\t\n";   // unsure how operands can be separated? Does it require a comma between? 
@@ -396,23 +418,23 @@ void main_2ndPass(void) {
   handleComments(string);
   while(line_size != -1) {
     if(strlen(string) == 0) {
-      continue; // SKIP iter for any All Comment lines
+      goto endSecond;
     }
     result = 0;
-    token = strtok(string, delimiters);
+    token = getToken(string, delimiters);
     if(isPsuedoOp(token)) {
       int pOp = getPseudoOp(token);
       switch(pOp) {
         case ORIG:
           if(!originFound) {
-            token = strtok(NULL, delimiters);
+            token = getToken(NULL, delimiters);
             startAddress = toLiteral(token, 16, UNSIGNED);
             output(startAddress);
             originFound = true;
           }
           break;
         case FILL:
-          token = strtok(NULL, delimiters);
+          token = getToken(NULL, delimiters);
           uint16_t fillValue = toLiteral(token, 9, UNSIGNED);
           output(fillValue);
           break;
@@ -422,17 +444,17 @@ void main_2ndPass(void) {
         default:
           break;
       }
-      token = strtok(NULL, delimiters);
-      if(token != NULL) {
-        sprintf(errorMessage, "Unexpected operand %s after pseudoOp on line %d", token, lineNumber);
-        error(4, errorMessage);
-      }
-      lineNumber++;
-      continue; // skip to next line after pseudo OP
+      // token = getToken(NULL, delimiters);
+      // if(token != NULL) {
+      //   sprintf(errorMessage, "Unexpected operand %s after pseudoOp on line %d", token, lineNumber);
+      //   error(4, errorMessage);
+      // }
+      goto endSecond;
+
     } else if(!originFound) {
         error(4, "NON-TRIVIAL LINE BEFORE .ORIG");
     } else if(isLabelValid(token)) {
-      token = strtok(NULL, delimiters); // if first token is a label & it's registered, skip to the next token
+      token = getToken(NULL, delimiters); // if first token is a label & it's registered, skip to the next token
     }
 
     enum OPCODE opcode = getOpcode(token);
@@ -440,11 +462,11 @@ void main_2ndPass(void) {
     switch(opcode) {
       case ADD:
       case AND:
-        a = strtok(NULL, delimiters);
+        a = getToken(NULL, delimiters);
         result += (RegisterToInt(a) << 9);
-        b = strtok(NULL, delimiters);
+        b = getToken(NULL, delimiters);
         result += (RegisterToInt(b) << 6);
-        c = strtok(NULL, delimiters);
+        c = getToken(NULL, delimiters);
         if(isLiteral(c)) {
           result += toLiteral(c, 5, SIGNED);
           result += 1<<5;
@@ -460,8 +482,7 @@ void main_2ndPass(void) {
       case BRNP:
       case BRZP:
       case BRNZP:
-        a = strtok(NULL, delimiters);
-        result += labelToLiteral(a);
+        a = getToken(NULL, delimiters);
         if(opcode = BRN || opcode == BRNZ || opcode == BRNP || opcode == BRNZP || opcode == BR) {
           result += (1<<11);
         }
@@ -471,11 +492,11 @@ void main_2ndPass(void) {
         if(opcode = BRP || opcode == BRZP || opcode == BRNP || opcode == BRNZP || opcode == BR) {
           result += (1<<9);
         }
-        result += labelToLiteral(a);
+        result += labelToLiteral(a) - lineNumber;
       break;
       case JMP:
       case JSRR:
-        a = strtok(NULL, delimiters);
+        a = getToken(NULL, delimiters);
         result += (RegisterToInt(a) << 6);
         break;
       case JSR:
@@ -486,23 +507,23 @@ void main_2ndPass(void) {
       case LDW:
       case STB:
       case STW:
-        a = strtok(NULL, delimiters);
+        a = getToken(NULL, delimiters);
         result += (RegisterToInt(a) << 9);
-        b = strtok(NULL, delimiters);
+        b = getToken(NULL, delimiters);
         result += (RegisterToInt(b) << 6);
-        c = strtok(NULL, delimiters);
+        c = getToken(NULL, delimiters);
         result += toLiteral(c,6,SIGNED);  //unsure if difference b/t STB/STW & LDB/LDW (left shift 1 bit) is @ compile time or runtime? 
         break;
       case LEA:
-        a = strtok(NULL, delimiters);
+        a = getToken(NULL, delimiters);
         result += (RegisterToInt(a) << 9);
-        b = strtok(NULL, delimiters);
+        b = getToken(NULL, delimiters);
         //TODO: b is label
         break;
       case NOT:        
-        a = strtok(NULL, delimiters);
+        a = getToken(NULL, delimiters);
         result += (RegisterToInt(a) << 9);
-        b = strtok(NULL, delimiters);
+        b = getToken(NULL, delimiters);
         result += (RegisterToInt(b) << 6);
         result += 0x3F;
         break;
@@ -516,11 +537,11 @@ void main_2ndPass(void) {
       case LSHF:
       case RSHFL:
       case RSHFA:
-        a = strtok(NULL, delimiters);
+        a = getToken(NULL, delimiters);
         result += (RegisterToInt(a) << 9);
-        b = strtok(NULL, delimiters);
+        b = getToken(NULL, delimiters);
         result += (RegisterToInt(b) << 6);
-        c = strtok(NULL, delimiters);
+        c = getToken(NULL, delimiters);
         result += toLiteral(c, 4, UNSIGNED);
         if(opcode == RSHFL) {
           result += (1<<4);
@@ -529,15 +550,15 @@ void main_2ndPass(void) {
         }
         break;
       case TRAP:
-        a = strtok(NULL, delimiters);
+        a = getToken(NULL, delimiters);
         result += toLiteral(a, 8, UNSIGNED);
         break;
       case XOR:
-        a = strtok(NULL, delimiters);
+        a = getToken(NULL, delimiters);
         result += (RegisterToInt(a) << 9);
-        b = strtok(NULL, delimiters);
+        b = getToken(NULL, delimiters);
         result += (RegisterToInt(b) << 6);
-        c = strtok(NULL, delimiters);
+        c = getToken(NULL, delimiters);
         if(isLiteral(c)) {
           result += toLiteral(c, 5, SIGNED);
           result += 1<<6;
@@ -550,12 +571,12 @@ void main_2ndPass(void) {
         break;
     }
     output(result);
+    endSecond:
     line_size = getline(&string, &line_buf_size, fileIn);
     handleComments(string);
     lineNumber++;
   }
   free(string);
-  fclose(fileOut);
   error(4, "NO .END");
 }
 
