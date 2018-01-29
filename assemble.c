@@ -5,8 +5,6 @@ LABEL VALUES = offset/2 (because 16bit addressable)
 
 RENAME labeltable.offset to line# 
 
-
-
 result += offset = currentLine - labelLine
 */
 
@@ -93,7 +91,7 @@ static const uint8_t opcodeMap[] = {
     4,    //OPCODE(JSR)   
     4,    //OPCODE(JSRR)   
     2,    //OPCODE(LDB)   
-    4,    //OPCODE(LDW)   
+    6,    //OPCODE(LDW)   
     14,    //OPCODE(LEA)
     13,    //OPCODE(LSHF)   
     0,    //OPCODE(NOP)   
@@ -146,6 +144,8 @@ void main_2ndPass(void);
 void verifyOriginFound(void);
 char* getToken(char* string, char* delimiters);
 void verifyBitLength(int num, int maxBits, bool isSigned);
+char* formatLine(char* string);
+uint16_t labelToLineNumber(char* label);
 
 void error(int32_t errorCode, char* extraMessage) {
   printf("\nLINE #%d\t", lineNumber);
@@ -200,6 +200,18 @@ bool isPsuedoOp(char* label) {
   return pOp;
 }
 
+bool isRegister(char* string) {
+  bool isRegister = false;
+  if(strlen(string) == 2) {
+    if(string[0] == 'R') {
+      if(string[1] >= '0' && string[1] <= '7')
+        isRegister = true;
+    }
+  }
+  return isRegister;
+} 
+
+
 int getPseudoOp(char* label) {
   int pOp = -1;
   if(label[0] == '.') {
@@ -220,6 +232,11 @@ int getPseudoOp(char* label) {
 }
 
 void addLabel(char* label, int line) {
+  if(labelToLineNumber(label) != ((uint16_t) -1)) {
+    sprintf(errorMessage, "Label %s already exists", label);
+    error(4, errorMessage);
+    return;
+  }
   struct Label *newLabel;
   newLabel = malloc(sizeof(struct Label));
   newLabel->name = malloc(strlen(label));
@@ -249,9 +266,6 @@ uint16_t labelToLineNumber(char* label) {
       result = l.line;
       break;
     }
-  }
-  if(result == -1) {  //TODO: error is either too premature or need to call differently in 1st pass
-    error(1,label);
   }
   return (uint16_t) result;
 }
@@ -352,15 +366,12 @@ void main_1stPass(void) {
   char *string;
   char *delimiters = " \t\n";
 
-
   line_size = 0;
   line_size = getline(&string, &line_buf_size, fileIn);
-  string[strlen(string) - 1] = '\0'; // getline adds a newline character after the string. remove that.
-  handleComments(string);
   while(line_size != -1) {
-
+    string = formatLine(string);
     if(strlen(string) == 0) {
-      goto endFirst; // SKIP iter for any All Comment lines
+      goto endFirstNoLineIncrement; // SKIP iter for any All Comment lines
     }
     token = getToken(string, delimiters);
     if(isPsuedoOp(token)) {
@@ -371,6 +382,8 @@ void main_1stPass(void) {
             error(4, "duplicate .ORIG");
           } else {
             originFound = true;
+            lineNumber = 0;
+            goto endFirstNoLineIncrement;
           }
           break;
         case FILL:
@@ -387,18 +400,25 @@ void main_1stPass(void) {
       verifyOriginFound();
     } else if(isLabelValid(token)) {
       verifyOriginFound();
-      addLabel(token, (lineNumber-1) + startAddress);
+      addLabel(token, lineNumber);
       printf("ADDED LABEL: %s %d\n", token, labelToLineNumber(token) + startAddress);    //DEBUG      
     }
 
     endFirst:
-
     lineNumber++;
+
+    endFirstNoLineIncrement:
     line_size = getline(&string, &line_buf_size, fileIn);
-    string[strlen(string) - 1] = '\0'; // getline adds a newline character after the string. remove that.
-    handleComments(string);
   }
   error(4, "NO .END");
+}
+
+void verifyEndOfLine(char* string, char* delimiters) {
+  token = strtok(string, delimiters);
+  if(token != NULL) {
+    sprintf(errorMessage, "Unexpected operand %s", token);
+    error(4, errorMessage);
+  }
 }
 
 char* getToken(char* string, char* delimiters) {
@@ -411,6 +431,36 @@ char* getToken(char* string, char* delimiters) {
     //token[i] == toUpper(token[i]);
   }
   return token;
+}
+
+char* trimWhiteSpace(char* string) {
+  int i = 0;
+  int offset = 0;
+  for(i = strlen(string) - 1; i >= 0; i--) {
+    if(string[i] == ' ' || string[i] == 't' || string[i] == '\n') {
+      string[i] = '\0';
+    } else {
+      break;
+    }
+  }
+
+  for(i = 0; i < strlen(string); i++) {
+    if(string[i] == ' ' || string[i] == 't' || string[i] == '\n') {
+      offset++;
+    } else {
+      break;
+    }
+  }
+  return string + offset;
+}
+
+char* formatLine(char* string) {
+  if(string != "") {
+    handleComments(string);
+    if(string != "")
+      string = trimWhiteSpace(string);
+  }
+  return string;
 }
 
 /*
@@ -429,14 +479,17 @@ void main_2ndPass(void) {
   char *a = malloc(10);
 
   line_size = getline(&string, &line_buf_size, fileIn);
-  string[strlen(string) - 1] = '\0'; // getline adds a newline character after the string. remove that.
-  handleComments(string);
   while(line_size != -1) {
+    string = formatLine(string);
     if(strlen(string) == 0) {
-      goto endSecond;
+      line_size = getline(&string, &line_buf_size, fileIn);
+      continue;
     }
     result = 0;
     token = getToken(string, delimiters);
+    if(labelToLineNumber(token) != ((uint16_t) -1)) { // if first token is a label & it's registered, skip to the next token
+      token = getToken(NULL, delimiters);
+    }
     if(isPsuedoOp(token)) {
       int pOp = getPseudoOp(token);
       switch(pOp) {
@@ -446,13 +499,15 @@ void main_2ndPass(void) {
             startAddress = toLiteral(token, 16, UNSIGNED);
             output(startAddress);
             originFound = true;
-            lineNumber = -1; // lineNumber increments @ end of while, so next line will be line 0
+            lineNumber = 0;
+            goto endSecondNoLineIncrement;
           }
           break;
         case FILL:
           token = getToken(NULL, delimiters);
           uint16_t fillValue = toLiteral(token, 9, UNSIGNED);
           output(fillValue);
+          goto endSecond;
           break;
         case END:
           return;
@@ -460,19 +515,12 @@ void main_2ndPass(void) {
         default:
           break;
       }
-      // token = getToken(NULL, delimiters);
-      // if(token != NULL) {
-      //   sprintf(errorMessage, "Unexpected operand %s after pseudoOp on line %d", token, lineNumber);
-      //   error(4, errorMessage);
-      // }
       goto endSecond;
 
     } else if(!originFound) {
         error(4, "NON-TRIVIAL LINE BEFORE .ORIG");
-    } else if(isLabelValid(token)) {
-      token = getToken(NULL, delimiters); // if first token is a label & it's registered, skip to the next token
     }
-
+    printf("%s\n", token);
     enum OPCODE opcode = getOpcode(token);
     result = opcodeToASM(opcode);
     int tmp;
@@ -485,7 +533,12 @@ void main_2ndPass(void) {
         result += (RegisterToInt(b) << 6);
         c = getToken(NULL, delimiters);
         if(isLiteral(c)) {
-          result += toLiteral(c, 5, SIGNED);
+          tmp = toLiteral(c, 5, SIGNED);
+          if(tmp > 0)
+            result += tmp;
+          else {
+            result -= tmp;
+          }
           result += 1<<5;
         } else {
           result += RegisterToInt(c);
@@ -514,6 +567,10 @@ void main_2ndPass(void) {
           result += (1<<9);
         }
         break;
+      case HALT:
+        result += opcodeToASM(TRAP);
+        result += 0x25;
+        break;
       case JMP:
       case JSRR:
         a = getToken(NULL, delimiters);
@@ -521,7 +578,10 @@ void main_2ndPass(void) {
         break;
       case JSR:
         result += 1<<11;
-        //TODO: LABEL
+        a = getToken(NULL, delimiters);
+        tmp = labelToLineNumber(a);
+        tmp -= lineNumber;
+        verifyBitLength(tmp, 11, true);
         break;
       case LDB:
       case LDW:
@@ -538,7 +598,7 @@ void main_2ndPass(void) {
         a = getToken(NULL, delimiters);
         result += (RegisterToInt(a) << 9);
         b = getToken(NULL, delimiters);
-        tmp = labelToLineNumber(a);
+        tmp = labelToLineNumber(b);
         tmp -= lineNumber;
         verifyBitLength(tmp, 11, true);
         result += tmp;
@@ -594,10 +654,13 @@ void main_2ndPass(void) {
         break;
     }
     output(result);
-    endSecond:
-    line_size = getline(&string, &line_buf_size, fileIn);
-    handleComments(string);
+
+    endSecond:    
     lineNumber++;
+
+    endSecondNoLineIncrement:
+    verifyEndOfLine(NULL, delimiters);
+    line_size = getline(&string, &line_buf_size, fileIn);
   }
   free(string);
   error(4, "NO .END");
@@ -659,12 +722,14 @@ enum OPCODE getOpcode(char* opcode) {
 }
 
 uint16_t RegisterToInt(char* reg)  {
-  int number = decToInt(reg+1); // skip the R
-  if(number > 7 || number < 0 || (reg[0] != 'r' && reg[0] != 'R')) {
+  uint16_t regVal = -1;
+  if(!isRegister(reg)) {
     sprintf(errorMessage, "%s is not a valid register, should be R0-R7", reg);
     error(4, errorMessage);
+  } else {
+    regVal = (uint16_t) decToInt(reg+1);
   }
-  return (uint16_t) number;
+  return regVal;
 }
 
 /*
