@@ -145,6 +145,7 @@ void main_1stPass(void);
 void main_2ndPass(void);
 void verifyOriginFound(void);
 char* getToken(char* string, char* delimiters);
+void verifyBitLength(int num, int maxBits, bool isSigned);
 
 void error(int32_t errorCode, char* extraMessage) {
   printf("\nLINE #%d\t", lineNumber);
@@ -168,7 +169,7 @@ void error(int32_t errorCode, char* extraMessage) {
   if(extraMessage) {
     printf("%s",extraMessage);
   }
-  printf("\n");
+  // printf("\n");
   // if(fileOut != NULL) {
   //   fclose(fileOut);
   // }
@@ -238,7 +239,7 @@ void addLabel(char* label, int line) {
   free(newLabel);
 }
 
-uint16_t labelToLiteral(char* label) {
+uint16_t labelToLineNumber(char* label) {
   int i;
   struct Label l;
   int result = -1;
@@ -255,6 +256,38 @@ uint16_t labelToLiteral(char* label) {
   return (uint16_t) result;
 }
 
+uint16_t getBranchResult(int opcode, char* label) {
+
+    return result;
+}
+
+
+void verifyBitLength(int num, int maxBits, bool isSigned) {
+  int max = 1 << maxBits;
+  bool throwError = false;
+  if(!isSigned) {
+    if(num >= max) {
+      sprintf(errorMessage, "%d literal is too large. Max = %d", num, max-1);
+      throwError = true;
+    }
+  } else {
+    if(num < 0) {
+      if(num*-2 >= max) {
+        sprintf(errorMessage, "%d literal is too low. Min = %d. ", num, (max>>1)*-1);
+        throwError = true;
+      }
+    } else {
+      if(2*num >= max) {
+        sprintf(errorMessage, "%d literal is too high. Max = %d", num, (max>>1)-1);
+        throwError = true;
+      }
+    }
+  }
+  if(throwError) {
+    error(3, errorMessage);
+  }
+}
+
 /*
 By the time this function is called the user is certain that the literal token is a numeric literal.
 The caller should know how many bits this number can occupy and whether or not that number is signed or unsigned
@@ -262,7 +295,6 @@ The caller should know how many bits this number can occupy and whether or not t
 int toLiteral(char* literal, uint8_t maxBits, bool isSigned) {
   int num = 0;
   int i;
-  int max = 1 << maxBits;
   bool throwError = false;
   if(literal[0] == 'X') {
     num = hexToInt(literal+1); //skip the x
@@ -273,24 +305,7 @@ int toLiteral(char* literal, uint8_t maxBits, bool isSigned) {
     throwError = true;
   }
   // check if within bounds
-  if(isSigned) {
-    if(num >= max) {
-      sprintf(errorMessage, "%s literal is too large. Max = %d", literal, max-1);
-      throwError = true;
-    }
-  } else {
-    if(num < 0) {
-      if(num*-2 > max) {
-        sprintf(errorMessage, "%s literal is too low. Min = %d. ", literal, (max>>1)*-1);
-        throwError = true;
-      }
-    } else {
-      if(2*num >= max) {
-        sprintf(errorMessage, "%s literal is too high. Max = %d", literal, (max>>1)-1);
-        throwError = true;
-      }
-    }
-  }
+  verifyBitLength(num, maxBits, isSigned);
   if(throwError) {
     error(3, errorMessage);
   }
@@ -373,7 +388,7 @@ void main_1stPass(void) {
     } else if(isLabelValid(token)) {
       verifyOriginFound();
       addLabel(token, (lineNumber-1) + startAddress);
-      printf("ADDED LABEL: %s %d\n", token, labelToLiteral(token) + startAddress);    //DEBUG      
+      printf("ADDED LABEL: %s %d\n", token, labelToLineNumber(token) + startAddress);    //DEBUG      
     }
 
     endFirst:
@@ -431,6 +446,7 @@ void main_2ndPass(void) {
             startAddress = toLiteral(token, 16, UNSIGNED);
             output(startAddress);
             originFound = true;
+            lineNumber = -1; // lineNumber increments @ end of while, so next line will be line 0
           }
           break;
         case FILL:
@@ -459,6 +475,7 @@ void main_2ndPass(void) {
 
     enum OPCODE opcode = getOpcode(token);
     result = opcodeToASM(opcode);
+    int tmp;
     switch(opcode) {
       case ADD:
       case AND:
@@ -483,17 +500,20 @@ void main_2ndPass(void) {
       case BRZP:
       case BRNZP:
         a = getToken(NULL, delimiters);
-        if(opcode = BRN || opcode == BRNZ || opcode == BRNP || opcode == BRNZP || opcode == BR) {
+        tmp = labelToLineNumber(a);
+        tmp -= lineNumber;
+        verifyBitLength(tmp, 9, true);
+        result += tmp;
+        if(opcode == BRN || opcode == BRNZ || opcode == BRNP || opcode == BRNZP || opcode == BR) {
           result += (1<<11);
         }
-        if (opcode = BRZ || opcode == BRNZ || opcode == BRZP || opcode == BRNZP || opcode == BR) {
+        if (opcode == BRZ || opcode == BRNZ || opcode == BRZP || opcode == BRNZP || opcode == BR) {
           result += (1<<10);
         }
-        if(opcode = BRP || opcode == BRZP || opcode == BRNP || opcode == BRNZP || opcode == BR) {
+        if(opcode == BRP || opcode == BRZP || opcode == BRNP || opcode == BRNZP || opcode == BR) {
           result += (1<<9);
         }
-        result += labelToLiteral(a) - lineNumber;
-      break;
+        break;
       case JMP:
       case JSRR:
         a = getToken(NULL, delimiters);
@@ -518,7 +538,10 @@ void main_2ndPass(void) {
         a = getToken(NULL, delimiters);
         result += (RegisterToInt(a) << 9);
         b = getToken(NULL, delimiters);
-        //TODO: b is label
+        tmp = labelToLineNumber(a);
+        tmp -= lineNumber;
+        verifyBitLength(tmp, 11, true);
+        result += tmp;
         break;
       case NOT:        
         a = getToken(NULL, delimiters);
@@ -579,48 +602,6 @@ void main_2ndPass(void) {
   free(string);
   error(4, "NO .END");
 }
-
-void main_testOutput(void) {
-	output(3000);
-	output(4800);
-	output(65535);
-	output(0);
-}
-
-void main_testIO(int32_t argc, char* argv[]) {
-  int i;
-  if(argc == 3) {
-    fileIn = fopen(argv[1], "r");
-    fileOut = fopen(argv[2], "w");
-  } else {
-    error(4, "");
-    printf("expected ./assemble <input.asm> <output.obj>\n");
-  }
- fclose(fileIn);
- fclose(fileOut);
-}
-
-/*
-returns the enum for the pseudoOp if it is one, else -1
-*/
-// int getPseudoOp(char* pseudoOp) {
-//   int code = -1;
-//   int i = 0;
-//   if(pseudoOp[0] != '.') {
-//     sprintf(errorMessage, "%s is not a valid pseudoOp", pseudoOp);
-//     error(2, errorMessage);
-//   } else {
-//     pseudoOp+=1; // skip the "."
-//     while(pseudoOps[i] != NULL) {
-//       if(strcmp(pseudoOps[i], pseudoOp) == 0) {
-//         code = i;
-//         break;
-//       } 
-//       i++;
-//     }
-//   }
-//   return code;
-// }
 
 /*
 Checks what is expected to be a label. This is used in the first pass, before storing a label in the label map.
