@@ -625,7 +625,7 @@ Labels should:
 */
 bool isLabelValid(char* label) {
   bool valid = true;
-  if(label[0] == 'X' || (label[0] >= '0' && label[0] <= '9') || ) {
+  if(label[0] == 'X' || (label[0] >= '0' && label[0] <= '9')) {
     valid = false;
     sprintf(errorMessage, "label %s is invalid", label);
     error(4, errorMessage);
