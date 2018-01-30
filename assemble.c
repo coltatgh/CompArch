@@ -116,6 +116,7 @@ static const uint8_t opcodeMap[] = {
 //GLOBAL VARIABLES
 FILE *fileIn = NULL;
 FILE *fileOut = NULL;
+char* fileOutName = NULL;
 char errorMessage[120];
 uint32_t lineNumber = 0;
 uint16_t startAddress = 0;
@@ -155,35 +156,35 @@ int labelToLineNumber(char* label);
 int  readAndParse( FILE * pInfile, char * pLine, char ** pLabel, char ** pOpcode, char ** pArg1, char ** pArg2, char ** pArg3, char ** pArg4);
 
 void error(int32_t errorCode, char* extraMessage) {
-  fprintf(fileOut, "\nLINE #%d\t", lineNumber);
   switch(errorCode) {
     case 0:
     case 1:
-      fprintf(fileOut, "exit(1): UNDEFINED LABEL\t");
+      printf("exit(1): line #%d\tUNDEFINED LABEL\t", lineNumber);
       break;
     case 2:
-      fprintf(fileOut, "exit(2): INVALID OPCODE\t");
+      printf("exit(2): line #%d\tINVALID OPCODE\t", lineNumber);
       break;
     case 3:
-      fprintf(fileOut, "exit(3): INVALID CONSTANT\t");
+      printf("exit(3): line #%d\tINVALID CONSTANT\t", lineNumber);
       break;
     case 4:
-      fprintf(fileOut, "exit(4): MISCELLANEOUS \t");
+      printf("exit(4): line #%d\tMISCELLANEOUS\t", lineNumber);
       break;
     default:
       break;
   }
   if(extraMessage) {
-    fprintf(fileOut, "%s", extraMessage);
+    printf("%s", extraMessage);
   }
-  fprintf(fileOut, "\n");
-  // if(fileOut != NULL) {
-  //   fclose(fileOut);
-  // }
-  // fileOut = fopen("out.obj", "w"); //TODO: change to non-magic string
-  // fputs("", fileOut); //clear contents of the output file if there is an error
-  // fclose(fileOut);
-  // exit(errorCode);
+  printf("\n\n");
+  if(fileOut != NULL) {
+    fclose(fileOut);
+  }
+  fileOut = fopen(fileOutName, "w"); //TODO: change to non-magic string
+  fputs("", fileOut); //clear contents of the output file if there is an error
+  fclose(fileOut);
+  free(fileOutName);
+  exit(errorCode);
 }
 
 void verifyOriginFound(void) {
@@ -285,6 +286,11 @@ void verifyBitLength(int num, int maxBits, bool isSigned) {
     if(num >= max) {
       sprintf(errorMessage, "%d literal is too large. Max = %d", num, max-1);
       throwError = true;
+    } else {
+      if(num < 0) {
+        sprintf(errorMessage, "%d is negative, but must be unsigned", num);
+        throwError = true;
+      }
     }
   } else {
     if(num < 0) {
@@ -340,6 +346,8 @@ void main(int32_t argc, char* argv[]) {
   if(argc == 3) {
     fileIn = fopen(argv[1], "r");
     fileOut = fopen(argv[2], "w");
+    fileOutName = malloc(sizeof(argv[2]) + 1);
+    strcpy(fileOutName, argv[2]);
   } else {
     error(4, "Invalid input arguments expected ./assemble <input>.asm <output>.obj");
   }
@@ -351,7 +359,6 @@ void main(int32_t argc, char* argv[]) {
   fclose(fileIn);
   fclose(fileOut);
 }
-
 
 void handleComments(char* string) {
   char *comment = strchr(string, ';');
@@ -397,7 +404,8 @@ void main_1stPass(void) {
             break;
         }
       } else if(getOpcode(opcode) == -1){
-        error(2, opcode);
+        sprintf(errorMessage, "%s", opcode);
+        error(2, errorMessage);
       }
       verifyOriginFound();    //first meaningful line has to be .ORIG
       if(isLabelValid(label) && (strcmp(label, "") != 0)) {
@@ -598,7 +606,8 @@ void main_2ndPass(void) {
             empty = b;
             break;
           default:
-            error(2, opcode);
+            sprintf(errorMessage, "%s", opcode);
+            error(2, errorMessage);
             break;
         }
         if(strcmp(empty,"") != 0) {
@@ -716,7 +725,6 @@ int hexToInt(char* hex) {
     end = 1;
   }
 
-  sprintf(errorMessage, "%s is a bad hex literal. Needs form of \"x-####\" - optional",hex);
   for(i = strlen(hex)-1; i >= end; i--) {  // end skips the 'x' (and if negative '-') character(s)
     if(hex[i] >= '0' && hex[i] <= '9') {
       constant = ASCIINUM;
@@ -725,6 +733,7 @@ int hexToInt(char* hex) {
     }  else if (hex[i] >= 'a' && hex[i] <= 'f') {
       constant = ASCIILOWER;
     } else {
+      sprintf(errorMessage, "%s is a bad hex literal. Needs form of \"x-####\" - optional",hex);
       error(3, errorMessage);
       val = -1;
       break;
@@ -799,29 +808,29 @@ int  readAndParse( FILE * pInfile, char * pLine, char ** pLabel, char ** pOpcode
   lPtr++;
 
   *lPtr = '\0';
-  if( !(lPtr = strtok( pLine, "\t\n ," ) ) ) 
+  if( !(lPtr = strtok( pLine, "\t\n\r ," ) ) ) 
   return( EMPTY_LINE );
 
   if( getOpcode( lPtr ) == -1 && lPtr[0] != '.' ) /* found a label */    //FIXME: ADD isOpcode function
   {
   *pLabel = lPtr;
-  if( !( lPtr = strtok( NULL, "\t\n ," ) ) ) return( OK );
+  if( !( lPtr = strtok( NULL, "\t\n\r ," ) ) ) return( OK );
   }
 
        *pOpcode = lPtr;
 
-  if( !( lPtr = strtok( NULL, "\t\n ," ) ) ) return( OK );
+  if( !( lPtr = strtok( NULL, "\t\n\r ," ) ) ) return( OK );
 
        *pArg1 = lPtr;
 
-       if( !( lPtr = strtok( NULL, "\t\n ," ) ) ) return( OK );
+       if( !( lPtr = strtok( NULL, "\t\n\r ," ) ) ) return( OK );
 
   *pArg2 = lPtr;
-  if( !( lPtr = strtok( NULL, "\t\n ," ) ) ) return( OK );
+  if( !( lPtr = strtok( NULL, "\t\n\r ," ) ) ) return( OK );
 
   *pArg3 = lPtr;
 
-  if( !( lPtr = strtok( NULL, "\t\n ," ) ) ) return( OK );
+  if( !( lPtr = strtok( NULL, "\t\n\r ," ) ) ) return( OK );
 
   *pArg4 = lPtr;
 
