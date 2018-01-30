@@ -624,15 +624,17 @@ Labels should:
 */
 bool isLabelValid(char* label) {
   bool valid = true;
-  if(label[0] == 'x') {
+  if(label[0] == 'X' || (label[0] >= '0' && label[0] <= '9') || ) {
     valid = false;
+    sprintf(errorMessage, "label %s is invalid", label);
+    error(4, errorMessage);
   } else {
     int i = 0;
     while(label[i] != NULL) {
       if(!isalnum(label[i])) {
         valid = false;
         sprintf(errorMessage, "label %s is not alphanumeric", label);
-        error(1, errorMessage);
+        error(4, errorMessage);
         break;
       }
       i++;
