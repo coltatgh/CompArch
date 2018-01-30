@@ -20,6 +20,12 @@ result += offset = currentLine - labelLine
 #define SIGNED  1
 #define UNSIGNED 0
 
+#define MAX_LINE_LENGTH 255
+enum
+{
+   DONE, OK, EMPTY_LINE
+};
+
 //begin Source 1 = https://stackoverflow.com/questions/9907160/how-to-convert-enum-names-to-string-in-c
 #define FOREACH_OPCODE(OPCODE) \
         OPCODE(ADD)   \
@@ -92,8 +98,8 @@ static const uint8_t opcodeMap[] = {
     4,    //OPCODE(JSRR)   
     2,    //OPCODE(LDB)   
     6,    //OPCODE(LDW)   
-    14,    //OPCODE(LEA)
-    13,    //OPCODE(LSHF)   
+    13,    //OPCODE(LSHF) 
+    14,    //OPCODE(LEA)  
     0,    //OPCODE(NOP)   
     9,    //OPCODE(NOT)   
     12,    //OPCODE(RET)   
@@ -145,31 +151,32 @@ void verifyOriginFound(void);
 char* getToken(char* string, char* delimiters);
 void verifyBitLength(int num, int maxBits, bool isSigned);
 char* formatLine(char* string);
-uint16_t labelToLineNumber(char* label);
+int labelToLineNumber(char* label);
+int  readAndParse( FILE * pInfile, char * pLine, char ** pLabel, char ** pOpcode, char ** pArg1, char ** pArg2, char ** pArg3, char ** pArg4);
 
 void error(int32_t errorCode, char* extraMessage) {
-  printf("\nLINE #%d\t", lineNumber);
+  fprintf(fileOut, "\nLINE #%d\t", lineNumber);
   switch(errorCode) {
     case 0:
     case 1:
-      printf("ERROR 1: UNDEFINED LABEL\t");
+      fprintf(fileOut, "exit(1): UNDEFINED LABEL\t");
       break;
     case 2:
-      printf("ERROR 2: INVALID OPCODE\t");
+      fprintf(fileOut, "exit(2): INVALID OPCODE\t");
       break;
     case 3:
-      printf("ERROR 3: INVALID CONSTANT\t");
+      fprintf(fileOut, "exit(3): INVALID CONSTANT\t");
       break;
     case 4:
-      printf("ERROR 4: MISCELLANEOUS \t");
+      fprintf(fileOut, "exit(4): MISCELLANEOUS \t");
       break;
     default:
       break;
   }
   if(extraMessage) {
-    printf("%s",extraMessage);
+    fprintf(fileOut, "%s", extraMessage);
   }
-  // printf("\n");
+  fprintf(fileOut, "\n");
   // if(fileOut != NULL) {
   //   fclose(fileOut);
   // }
@@ -232,7 +239,7 @@ int getPseudoOp(char* label) {
 }
 
 void addLabel(char* label, int line) {
-  if(labelToLineNumber(label) != ((uint16_t) -1)) {
+  if(labelToLineNumber(label) != -1) {
     sprintf(errorMessage, "Label %s already exists", label);
     error(4, errorMessage);
     return;
@@ -256,7 +263,7 @@ void addLabel(char* label, int line) {
   free(newLabel);
 }
 
-uint16_t labelToLineNumber(char* label) {
+int labelToLineNumber(char* label) {
   int i;
   struct Label l;
   int result = -1;
@@ -267,12 +274,7 @@ uint16_t labelToLineNumber(char* label) {
       break;
     }
   }
-  return (uint16_t) result;
-}
-
-uint16_t getBranchResult(int opcode, char* label) {
-
-    return result;
+  return result;
 }
 
 
@@ -335,20 +337,18 @@ bool isLiteral(char* literal) {
 
 void main(int32_t argc, char* argv[]) {
   int i;
-  token = malloc(10);
   if(argc == 3) {
     fileIn = fopen(argv[1], "r");
     fileOut = fopen(argv[2], "w");
   } else {
-    error(4, "");
-    printf("expected ./assemble <input.asm> <output.obj>\n");
+    error(4, "Invalid input arguments expected ./assemble <input>.asm <output>.obj");
   }
   main_1stPass();
-  originFound = false;
   fclose(fileIn);
   fileIn = fopen(argv[1], "r");
   lineNumber = 0;
-  main_2ndPass();  
+  main_2ndPass();
+  fclose(fileIn);
   fclose(fileOut);
 }
 
@@ -360,57 +360,53 @@ void handleComments(char* string) {
   }
 }
 
+/*
+1st Pass
+Populates labelTable
+Error checks for the following (thus, don't need to do these in 2nd pass):
+  1. invalid labels
+  2. begin/end w/ .ORIG & .END
+  3. start address is 16bit
+  4. invalid opcodes
+Outputs the start address @ .ORIG
+*/
 void main_1stPass(void) {
-  ssize_t line_size = 0;
-  ssize_t line_buf_size = 0;
-  char *string;
-  char *delimiters = " \t\n";
-
-  line_size = 0;
-  line_size = getline(&string, &line_buf_size, fileIn);
-  while(line_size != -1) {
-    string = formatLine(string);
-    if(strlen(string) == 0) {
-      goto endFirstNoLineIncrement; // SKIP iter for any All Comment lines
-    }
-    token = getToken(string, delimiters);
-    if(isPsuedoOp(token)) {
-      int pOp = getPseudoOp(token);
-      switch(pOp) {
-        case ORIG:
-          if(originFound) {
-            error(4, "duplicate .ORIG");
-          } else {
-            originFound = true;
-            lineNumber = 0;
-            goto endFirstNoLineIncrement;
-          }
-          break;
-        case FILL:
-          verifyOriginFound();
-          break;
-        case END:
-          verifyOriginFound();
-          return;
-          break;
-        default:
-          break;
+  char string[MAX_LINE_LENGTH + 1], *label, *opcode, *a, *b, *c, *d;
+  int lRet;
+  lineNumber = 0;
+  originFound = false;
+  do {
+    lRet = readAndParse( fileIn, string, &label, &opcode, &a, &b, &c, &d );
+    if( lRet != DONE && lRet != EMPTY_LINE ) {
+      if(isPsuedoOp(opcode)) {
+        switch(getPseudoOp(opcode)) {
+          case ORIG:
+            if(originFound) {
+              error(4, "duplicate .ORIG");
+            } else {
+              originFound = true;
+              startAddress = toLiteral(a, 16, UNSIGNED);
+              output(startAddress);
+            }
+            break;
+          case FILL:
+            break;
+          case END:
+            return;
+            break;
+        }
+      } else if(getOpcode(opcode) == -1){
+        error(2, opcode);
       }
-    } else if (getOpcode(token) != -1) { //is an opcode
-      verifyOriginFound();
-    } else if(isLabelValid(token)) {
-      verifyOriginFound();
-      addLabel(token, lineNumber);
-      printf("ADDED LABEL: %s %d\n", token, labelToLineNumber(token) + startAddress);    //DEBUG      
+      verifyOriginFound();    //first meaningful line has to be .ORIG
+      if(isLabelValid(label) && (strcmp(label, "") != 0)) {
+        addLabel(label, lineNumber);
+      }
+      lineNumber++;
     }
-
-    endFirst:
-    lineNumber++;
-
-    endFirstNoLineIncrement:
-    line_size = getline(&string, &line_buf_size, fileIn);
-  }
+  } while( lRet != DONE );
   error(4, "NO .END");
+  return;
 }
 
 void verifyEndOfLine(char* string, char* delimiters) {
@@ -468,202 +464,152 @@ all pseudo-op/orig/end formatting is handled, I just need to have the line start
 .ORIG is and handle .END/.FILL
 */
 void main_2ndPass(void) {
-  ssize_t line_size = 0;
-  ssize_t line_buf_size = 0;
-  char *string = malloc(255);
-  char *delimiters = " ,\t\n";
-  char *operatorDelimiters = " \t\n";   // operators can't be separated by comma
-  char *operandDelimiters = " ,\t\n";   // unsure how operands can be separated? Does it require a comma between? 
-  char *b = malloc(10);
-  char *c = malloc(10);
-  char *a = malloc(10);
 
-  line_size = getline(&string, &line_buf_size, fileIn);
-  while(line_size != -1) {
-    string = formatLine(string);
-    if(strlen(string) == 0) {
-      line_size = getline(&string, &line_buf_size, fileIn);
-      continue;
-    }
-    result = 0;
-    token = getToken(string, delimiters);
-    if(labelToLineNumber(token) != ((uint16_t) -1)) { // if first token is a label & it's registered, skip to the next token
-      token = getToken(NULL, delimiters);
-    }
-    if(isPsuedoOp(token)) {
-      int pOp = getPseudoOp(token);
-      switch(pOp) {
-        case ORIG:
-          if(!originFound) {
-            token = getToken(NULL, delimiters);
-            startAddress = toLiteral(token, 16, UNSIGNED);
-            output(startAddress);
-            originFound = true;
-            lineNumber = 0;
-            goto endSecondNoLineIncrement;
-          }
-          break;
-        case FILL:
-          token = getToken(NULL, delimiters);
-          uint16_t fillValue = toLiteral(token, 9, UNSIGNED);
-          output(fillValue);
-          goto endSecond;
-          break;
-        case END:
-          return;
-          break;
-        default:
-          break;
+/* Note: MAX_LINE_LENGTH, OK, EMPTY_LINE, and DONE are defined values */
+
+//To call readAndParse, you would use the following:
+  char string[MAX_LINE_LENGTH + 1], *label, *opcode, *a, *b, *c, *d;
+  int lRet;
+  char* empty;
+  do {
+    lRet = readAndParse( fileIn, string, &label, &opcode, &a, &b, &c, &d );
+    if( lRet != DONE && lRet != EMPTY_LINE ) {
+      if(isPsuedoOp(opcode)) {
+        int pOp = getPseudoOp(opcode);
+        switch(getPseudoOp(opcode)) {
+          case ORIG:
+            continue;
+            break;
+          case FILL:
+            result = toLiteral(a, 16, UNSIGNED);  //FIXME: ".FILL can take a signed number or an unsigned number"
+            empty = b;
+            break;
+          case END:
+            return;
+            break;
+        }
+      } else {
+        int tmp;
+        int opC = getOpcode(opcode);
+        result = opcodeToASM(opC);
+        switch(opC) {
+          case ADD:
+          case AND:
+          case XOR:
+            result += (RegisterToInt(a) << 9);
+            result += (RegisterToInt(b) << 6);
+            if(isLiteral(c)) {
+              tmp = toLiteral(c, 5, SIGNED);
+              result |= (tmp & 0x1F);
+              result += 1<<5;
+            } else {
+              result += RegisterToInt(c);
+            }
+            empty = d;
+            break;  
+          case BR:
+          case BRN:
+          case BRZ:
+          case BRP:
+          case BRNZ:
+          case BRNP:
+          case BRZP:
+          case BRNZP:
+            tmp = labelToLineNumber(a) - (lineNumber + 2);
+            verifyBitLength(tmp, 9, SIGNED);
+            result |= (tmp & 0x1FF);
+            if(opC == BRN || opC == BRNZ || opC == BRNP || opC == BRNZP || opC == BR) {
+              result += (1<<11);
+            }
+            if (opC == BRZ || opC == BRNZ || opC == BRZP || opC == BRNZP || opC == BR) {
+              result += (1<<10);
+            }
+            if(opC == BRP || opC == BRZP || opC == BRNP || opC == BRNZP || opC == BR) {
+              result += (1<<9);
+            }
+            empty = b;
+            break;
+          case HALT:
+            result = opcodeToASM(TRAP);
+            result += 0x25;
+            empty = a;
+            break;
+          case JMP:
+          case JSRR:
+            result += (RegisterToInt(a) << 6);
+            empty = b;
+            break;
+          case JSR:
+            result += 1<<11;
+            tmp = labelToLineNumber(a) - (lineNumber + 2);
+            verifyBitLength(tmp, 11, SIGNED);
+            result |= (tmp & 0x7FF);
+            empty = b;
+            break;
+          case LDB:
+          case LDW:
+          case STB:
+          case STW:
+            result += (RegisterToInt(a) << 9);
+            result += (RegisterToInt(b) << 6);
+            tmp = toLiteral(c,6,SIGNED);
+            result |= (tmp & 0x3F);
+            empty = d;
+            break;
+          case LEA:
+            result += (RegisterToInt(a) << 9);
+            tmp = labelToLineNumber(b) - (lineNumber + 2);
+            verifyBitLength(tmp, 9, SIGNED);
+            result |= (tmp & 0x1FF);
+            empty = c;
+            break;
+          case NOT:        
+            result += (RegisterToInt(a) << 9);
+            result += (RegisterToInt(b) << 6);
+            result += 0x3F;
+            empty = c;
+            break;
+          case RET:
+            result += 7<<6;
+            empty = a;
+            break;
+          case RTI:
+          case NOP:
+            //RTI & NOP is just the opcode and all 0s after that, so nothing extra needed
+            break;
+          case LSHF:
+          case RSHFL:
+          case RSHFA:
+            result += (RegisterToInt(a) << 9);
+            result += (RegisterToInt(b) << 6);
+            tmp = toLiteral(c, 4, UNSIGNED);
+            result |= (tmp & 0xF);
+            if(opC == RSHFL) {
+              result += (1<<4);
+            } else if (opC == RSHFA) {
+              result += (3<<4);
+            }
+            empty = d;
+            break;
+          case TRAP:
+            tmp = toLiteral(a, 8, UNSIGNED);
+            result |= (tmp & 0xFF);
+            empty = b;
+            break;
+          default:
+            error(2, opcode);
+            break;
+        }
+        if(strcmp(empty,"") != 0) {
+          sprintf(errorMessage, "unexpected operand: %s", empty);
+          error(4, errorMessage);
+        }
       }
-      goto endSecond;
-
-    } else if(!originFound) {
-        error(4, "NON-TRIVIAL LINE BEFORE .ORIG");
+      output(result);
+      lineNumber++;
     }
-    printf("%s\n", token);
-    enum OPCODE opcode = getOpcode(token);
-    result = opcodeToASM(opcode);
-    int tmp;
-    switch(opcode) {
-      case ADD:
-      case AND:
-        a = getToken(NULL, delimiters);
-        result += (RegisterToInt(a) << 9);
-        b = getToken(NULL, delimiters);
-        result += (RegisterToInt(b) << 6);
-        c = getToken(NULL, delimiters);
-        if(isLiteral(c)) {
-          tmp = toLiteral(c, 5, SIGNED);
-          if(tmp > 0)
-            result += tmp;
-          else {
-            result -= tmp;
-          }
-          result += 1<<5;
-        } else {
-          result += RegisterToInt(c);
-        }
-        break;  
-      case BR:
-      case BRN:
-      case BRZ:
-      case BRP:
-      case BRNZ:
-      case BRNP:
-      case BRZP:
-      case BRNZP:
-        a = getToken(NULL, delimiters);
-        tmp = labelToLineNumber(a);
-        tmp -= lineNumber;
-        verifyBitLength(tmp, 9, true);
-        result += tmp;
-        if(opcode == BRN || opcode == BRNZ || opcode == BRNP || opcode == BRNZP || opcode == BR) {
-          result += (1<<11);
-        }
-        if (opcode == BRZ || opcode == BRNZ || opcode == BRZP || opcode == BRNZP || opcode == BR) {
-          result += (1<<10);
-        }
-        if(opcode == BRP || opcode == BRZP || opcode == BRNP || opcode == BRNZP || opcode == BR) {
-          result += (1<<9);
-        }
-        break;
-      case HALT:
-        result += opcodeToASM(TRAP);
-        result += 0x25;
-        break;
-      case JMP:
-      case JSRR:
-        a = getToken(NULL, delimiters);
-        result += (RegisterToInt(a) << 6);
-        break;
-      case JSR:
-        result += 1<<11;
-        a = getToken(NULL, delimiters);
-        tmp = labelToLineNumber(a);
-        tmp -= lineNumber;
-        verifyBitLength(tmp, 11, true);
-        break;
-      case LDB:
-      case LDW:
-      case STB:
-      case STW:
-        a = getToken(NULL, delimiters);
-        result += (RegisterToInt(a) << 9);
-        b = getToken(NULL, delimiters);
-        result += (RegisterToInt(b) << 6);
-        c = getToken(NULL, delimiters);
-        result += toLiteral(c,6,SIGNED);  //unsure if difference b/t STB/STW & LDB/LDW (left shift 1 bit) is @ compile time or runtime? 
-        break;
-      case LEA:
-        a = getToken(NULL, delimiters);
-        result += (RegisterToInt(a) << 9);
-        b = getToken(NULL, delimiters);
-        tmp = labelToLineNumber(b);
-        tmp -= lineNumber;
-        verifyBitLength(tmp, 11, true);
-        result += tmp;
-        break;
-      case NOT:        
-        a = getToken(NULL, delimiters);
-        result += (RegisterToInt(a) << 9);
-        b = getToken(NULL, delimiters);
-        result += (RegisterToInt(b) << 6);
-        result += 0x3F;
-        break;
-      case RET:
-        result += 7<<6;
-        break;
-      case RTI:
-      case NOP:
-        //RTI & NOP is just the opcode and all 0s after that, so nothing extra needed
-        break;
-      case LSHF:
-      case RSHFL:
-      case RSHFA:
-        a = getToken(NULL, delimiters);
-        result += (RegisterToInt(a) << 9);
-        b = getToken(NULL, delimiters);
-        result += (RegisterToInt(b) << 6);
-        c = getToken(NULL, delimiters);
-        result += toLiteral(c, 4, UNSIGNED);
-        if(opcode == RSHFL) {
-          result += (1<<4);
-        } else if (opcode == RSHFA) {
-          result += (3<<4);
-        }
-        break;
-      case TRAP:
-        a = getToken(NULL, delimiters);
-        result += toLiteral(a, 8, UNSIGNED);
-        break;
-      case XOR:
-        a = getToken(NULL, delimiters);
-        result += (RegisterToInt(a) << 9);
-        b = getToken(NULL, delimiters);
-        result += (RegisterToInt(b) << 6);
-        c = getToken(NULL, delimiters);
-        if(isLiteral(c)) {
-          result += toLiteral(c, 5, SIGNED);
-          result += 1<<6;
-        } else {
-          result += RegisterToInt(c);
-        }
-        break;
-      default:
-        sprintf(errorMessage, "1st token = %s", token);
-        break;
-    }
-    output(result);
-
-    endSecond:    
-    lineNumber++;
-
-    endSecondNoLineIncrement:
-    verifyEndOfLine(NULL, delimiters);
-    line_size = getline(&string, &line_buf_size, fileIn);
-  }
-  free(string);
-  error(4, "NO .END");
+  } while( lRet != DONE );
+  return;
 }
 
 /*
@@ -747,9 +693,7 @@ Formats output. Expects output to be a uint16_t. Will convert that number to a s
 2. prints every entry as a 4 digit hex in all caps
 */
 void output(uint16_t output) {
-	char string [8];
-  sprintf(string, "0x%04X\n", output);
-	fputs(string, fileOut);
+  fprintf(fileOut, "0x%.4X\n", output);
 }
 
 /*
@@ -826,3 +770,60 @@ int decToInt(char* dec) {
   return val;
 }
 
+
+
+
+/*
+BEGIN Source 2: http://users.ece.utexas.edu/~patt/15s.460N/labs/lab1/Lab1Functions.html
+*/
+
+int  readAndParse( FILE * pInfile, char * pLine, char ** pLabel, char ** pOpcode, char ** pArg1, char ** pArg2, char ** pArg3, char ** pArg4) {
+  char * lRet, * lPtr;
+  int i;
+  if( !fgets( pLine, MAX_LINE_LENGTH, pInfile ) )
+  return( DONE );
+  for( i = 0; i < strlen( pLine ); i++ )
+  pLine[i] = toupper( pLine[i] );
+
+       /* convert entire line to lowercase */
+  *pLabel = *pOpcode = *pArg1 = *pArg2 = *pArg3 = *pArg4 = pLine + strlen(pLine);
+
+  /* ignore the comments */
+  lPtr = pLine;
+
+  while( *lPtr != ';' && *lPtr != '\0' &&
+  *lPtr != '\n' ) 
+  lPtr++;
+
+  *lPtr = '\0';
+  if( !(lPtr = strtok( pLine, "\t\n ," ) ) ) 
+  return( EMPTY_LINE );
+
+  if( getOpcode( lPtr ) == -1 && lPtr[0] != '.' ) /* found a label */    //FIXME: ADD isOpcode function
+  {
+  *pLabel = lPtr;
+  if( !( lPtr = strtok( NULL, "\t\n ," ) ) ) return( OK );
+  }
+
+       *pOpcode = lPtr;
+
+  if( !( lPtr = strtok( NULL, "\t\n ," ) ) ) return( OK );
+
+       *pArg1 = lPtr;
+
+       if( !( lPtr = strtok( NULL, "\t\n ," ) ) ) return( OK );
+
+  *pArg2 = lPtr;
+  if( !( lPtr = strtok( NULL, "\t\n ," ) ) ) return( OK );
+
+  *pArg3 = lPtr;
+
+  if( !( lPtr = strtok( NULL, "\t\n ," ) ) ) return( OK );
+
+  *pArg4 = lPtr;
+
+  return( OK );
+}
+/*
+END Source 2: http://users.ece.utexas.edu/~patt/15s.460N/labs/lab1/Lab1Functions.html
+*/
