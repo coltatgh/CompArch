@@ -42,7 +42,7 @@ THREE	LEA R4, SRC3	; Select SRC3
 ; ---Shuffle accordingly -----------------------------------------------
 SHFL	LDW R4, R4, #0	; get the address of the selected source
 		LDB R5, R4, #0	; get the contents of the selected source
-		STB R5, R0, R1	; And then store them in the current DST location
+		STB R5, R0, #0	; And then store them in the current DST location
 
 ; Check if done
 		ADD R6, R1, #-3
@@ -50,7 +50,8 @@ SHFL	LDW R4, R4, #0	; get the address of the selected source
 
 ; If not, reset for next loop
 		RSHFL R2, R2, #2	; move to the next bit pair in the control mask
-		ADD R1, R1, #1		; move to the next DST address
+		ADD R0, R0, #1		; move to the next DST address
+		ADD R1, R1, #1		; superfluous loop counter
 		BR LOOP
 
 ; ---Finish ------------------------------------------------------------
