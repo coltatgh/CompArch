@@ -381,9 +381,7 @@ void main_1stPass(void) {
       if(isPsuedoOp(opcode)) {
         switch(getPseudoOp(opcode)) {
           case ORIG:
-            if(originFound) {
-              error(4, "duplicate .ORIG");
-            } else {
+            if(!originFound) {
               originFound = true;
               startAddress = toLiteral(a, 16, UNSIGNED);
               output(startAddress);
@@ -393,6 +391,9 @@ void main_1stPass(void) {
             break;
           case END:
             return;
+            break;
+           default:
+            error(4, "invalid pseudoOp");
             break;
         }
       } else if(getOpcode(opcode) == -1){
