@@ -4,5 +4,3 @@ JSR ADD	; JSR is parsed as an opcode, and ADD is an
 			; should return error code 4, we accept
 			; error code 1 for this case, too.
 .END
-
-should exit(1) or exit(4)
