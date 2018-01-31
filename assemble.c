@@ -155,6 +155,7 @@ void verifyOriginFound(void);
 void verifyBitLength(int num, int maxBits, bool isSigned, bool isOffset);
 int labelToLineNumber(char* label);
 int readAndParse( FILE * pInfile, char * pLine, char ** pLabel, char ** pOpcode, char ** pArg1, char ** pArg2, char ** pArg3, char ** pArg4);
+void verifyNumberOfOperands(char* a, char* b, char* c, char* d, int numOperands);
 
 void error(int32_t errorCode, char* extraMessage) {
   switch(errorCode) {
@@ -283,6 +284,7 @@ void addLabel(char* label, int line) {
 }
 
 int labelToLineNumber(char* label) {
+  isLabelValid(label); /*throws error if label isn't valid*/
   int i;
   struct Label l;
   int result = -1;
@@ -414,6 +416,7 @@ void main_1stPass(void) {
       if(isPsuedoOp(opcode)) {
         switch(getPseudoOp(opcode)) {
           case ORIG:
+            verifyNumberOfOperands(a, b, c, d, 1);
             if(!originFound) {
               originFound = true;
               startAddress = toLiteral(a, 16, UNSIGNED);
@@ -425,6 +428,7 @@ void main_1stPass(void) {
             }
             break;
           case FILL:
+            verifyNumberOfOperands(a, b, c, d, 1);
             verifyOriginFound();
             break;
           case END:
@@ -469,7 +473,6 @@ void main_2ndPass(void) {
 /*To call readAndParse, you would use the following:*/
   char string[MAX_LINE_LENGTH + 1], *label, *opcode, *a, *b, *c, *d;
   int lRet;
-  char* empty;
   do {
     lRet = readAndParse( fileIn, string, &label, &opcode, &a, &b, &c, &d );
     if( lRet != DONE && lRet != EMPTY_LINE ) {
@@ -481,7 +484,6 @@ void main_2ndPass(void) {
             break;
           case FILL:
             result = toLiteral(a, 16, UNSIGNED);  /*FIXME: ".FILL can take a signed number or an unsigned number"*/
-            empty = b;
             break;
           case END:
             return;
@@ -495,6 +497,7 @@ void main_2ndPass(void) {
           case ADD:
           case AND:
           case XOR:
+            verifyNumberOfOperands(a, b, c, d, 3);
             result += (RegisterToInt(a) << 9);
             result += (RegisterToInt(b) << 6);
             if(isLiteral(c)) {
@@ -504,7 +507,6 @@ void main_2ndPass(void) {
             } else {
               result += RegisterToInt(c);
             }
-            empty = d;
             break;  
           case BR:
           case BRN:
@@ -514,6 +516,7 @@ void main_2ndPass(void) {
           case BRNP:
           case BRZP:
           case BRNZP:
+            verifyNumberOfOperands(a, b, c, d, 1);
             tmp = labelToLineNumber(a) - (lineNumber + 2);
             verifyBitLength(tmp, 9, SIGNED, true);
             result |= (tmp & 0x1FF);
@@ -526,60 +529,60 @@ void main_2ndPass(void) {
             if(opC == BRP || opC == BRZP || opC == BRNP || opC == BRNZP || opC == BR) {
               result += (1<<9);
             }
-            empty = b;
             break;
           case HALT:
+            verifyNumberOfOperands(a, b, c, d, 0);
             result = opcodeToASM(TRAP);
             result += 0x25;
-            empty = a;
             break;
           case JMP:
           case JSRR:
+            verifyNumberOfOperands(a, b, c, d, 1);
             result += (RegisterToInt(a) << 6);
-            empty = b;
             break;
           case JSR:
+            verifyNumberOfOperands(a, b, c, d, 1);
             result += 1<<11;
             tmp = labelToLineNumber(a) - (lineNumber + 2);
             verifyBitLength(tmp, 11, SIGNED, true);
             result |= (tmp & 0x7FF);
-            empty = b;
             break;
           case LDB:
           case LDW:
           case STB:
           case STW:
+            verifyNumberOfOperands(a, b, c, d, 3);
             result += (RegisterToInt(a) << 9);
             result += (RegisterToInt(b) << 6);
             tmp = toLiteral(c,6,SIGNED);
             result |= (tmp & 0x3F);
-            empty = d;
             break;
           case LEA:
+            verifyNumberOfOperands(a, b, c, d, 2);
             result += (RegisterToInt(a) << 9);
             tmp = labelToLineNumber(b) - (lineNumber + 2);
             verifyBitLength(tmp, 9, SIGNED, true);
             result |= (tmp & 0x1FF);
-            empty = c;
             break;
           case NOT:        
+            verifyNumberOfOperands(a, b, c, d, 2);
             result += (RegisterToInt(a) << 9);
             result += (RegisterToInt(b) << 6);
             result += 0x3F;
-            empty = c;
             break;
           case RET:
+            verifyNumberOfOperands(a, b, c, d, 0);
             result += 7<<6;
-            empty = a;
             break;
           case RTI:
           case NOP:
-            empty = a;
+            verifyNumberOfOperands(a, b, c, d, 0);
             /*RTI & NOP is just the opcode and all 0s after that, so nothing extra needed*/
             break;
           case LSHF:
           case RSHFL:
           case RSHFA:
+            verifyNumberOfOperands(a, b, c, d, 3);
             result += (RegisterToInt(a) << 9);
             result += (RegisterToInt(b) << 6);
             tmp = toLiteral(c, 4, UNSIGNED);
@@ -589,21 +592,16 @@ void main_2ndPass(void) {
             } else if (opC == RSHFA) {
               result += (3<<4);
             }
-            empty = d;
             break;
           case TRAP:
+            verifyNumberOfOperands(a, b, c, d, 1);
             tmp = toLiteral(a, 8, UNSIGNED);
             result |= (tmp & 0xFF);
-            empty = b;
             break;
           default:
             sprintf(errorMessage, "%s", opcode);
             error(2, errorMessage);
             break;
-        }
-        if(strcmp(empty,"") != 0) {
-          sprintf(errorMessage, "unexpected operand: %s", empty);
-          error(4, errorMessage);
         }
       }
       output(result);
@@ -828,3 +826,28 @@ int  readAndParse( FILE * pInfile, char * pLine, char ** pLabel, char ** pOpcode
 /*
 END Source 2: http:/*users.ece.utexas.edu/~patt/15s.460N/labs/lab1/Lab1Functions.html
 */
+
+void verifyNumberOfOperands(char* a, char* b, char* c, char* d, int numOperands) {
+  bool throwError = false;
+  switch(numOperands) {
+    case 0:
+      throwError = strlen(a);
+    break;
+    case 1:
+      throwError = (strlen(b) != 0) || (strlen(a) == 0);
+    break;
+    case 2:
+      throwError = (strlen(c) != 0) || (strlen(b) == 0);
+    break;
+    case 3:
+      throwError = (strlen(d) != 0) || (strlen(c) == 0);
+    break;
+    default:
+      printf("unexpected number of operands passed to verify %d", numOperands);
+    break;
+  }
+  if(throwError) {  
+    sprintf(errorMessage, "incorrect number of operands. operands = %s %s %s %s. expected number = %d", a, b, c, d, numOperands);
+    error(4, errorMessage);
+  }
+}
