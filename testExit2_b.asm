@@ -1,0 +1,3 @@
+.ORIG x1001
+ABC
+.END

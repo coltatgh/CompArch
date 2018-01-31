@@ -1,17 +1,15 @@
          .ORIG x4000
 
-ROOT_PTR .FILL NODE1
-
-NODE1    .FILL NODE2
-         .FILL NODE3
+NODE1    BR NODE2
+         BR NODE3
          .FILL #10000
 
-NODE2    .FILL NODE4
-         .FILL NODE5
+NODE2    BR NODE4
+         BR NODE5
          .FILL #12000
 
-NODE3    .FILL NODE6
-         .FILL NODE7
+NODE3    BR NODE6
+         BR NODE7
          .FILL #14000
 
 NODE4    .FILL x0000

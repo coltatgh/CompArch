@@ -12,6 +12,7 @@ result += offset = currentLine - labelLine
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <malloc.h>
 
 #define ASCIINUM '0'
@@ -26,7 +27,8 @@ enum
    DONE, OK, EMPTY_LINE
 };
 
-//begin Source 1 = https://stackoverflow.com/questions/9907160/how-to-convert-enum-names-to-string-in-c
+/* Source 1 = https:/*stackoverflow.com/questions/9907160/how-to-convert-enum-names-to-string-in-c
+*/
 #define FOREACH_OPCODE(OPCODE) \
         OPCODE(ADD)   \
         OPCODE(AND)  \
@@ -82,38 +84,38 @@ static const char *opcodes[] = {
 };
 
 static const uint8_t opcodeMap[] = {
-    1,    //OPCODE(ADD)   
-    5,    //OPCODE(AND)  
-    0,    //OPCODE(BR)  
-    0,    //OPCODE(BRN)   
-    0,    //OPCODE(BRZ)   
-    0,    //OPCODE(BRP)   
-    0,    //OPCODE(BRNZ)   
-    0,    //OPCODE(BRNP)   
-    0,    //OPCODE(BRZP)   
-    0,    //OPCODE(BRNZP)   
-    0,    //OPCODE(HALT)   
-    12,    //OPCODE(JMP)   
-    4,    //OPCODE(JSR)   
-    4,    //OPCODE(JSRR)   
-    2,    //OPCODE(LDB)   
-    6,    //OPCODE(LDW)   
-    13,    //OPCODE(LSHF) 
-    14,    //OPCODE(LEA)  
-    0,    //OPCODE(NOP)   
-    9,    //OPCODE(NOT)   
-    12,    //OPCODE(RET)   
-    13,    //OPCODE(RSHFL)   
-    13,    //OPCODE(RSHFA)   
-    8,    //OPCODE(RTI)   
-    3,    //OPCODE(STB)   
-    7,    //OPCODE(STW)   
-    15,    //OPCODE(TRAP)   
-    9    //OPCODE(XOR)   
+    1,    /*OPCODE(ADD)*/   
+    5,    /*OPCODE(AND)*/  
+    0,    /*OPCODE(BR)*/  
+    0,    /*OPCODE(BRN) */  
+    0,    /*OPCODE(BRZ)   */
+    0,    /*OPCODE(BRP)   */
+    0,    /*OPCODE(BRNZ)  */ 
+    0,    /*OPCODE(BRNP)   */
+    0,    /*OPCODE(BRZP)   */
+    0,    /*OPCODE(BRNZP)   */
+    0,    /*OPCODE(HALT)   */
+    12,    /*OPCODE(JMP)   */
+    4,    /*OPCODE(JSR)   */
+    4,    /*OPCODE(JSRR)   */
+    2,    /*OPCODE(LDB)   */
+    6,    /*OPCODE(LDW)   */
+    13,    /*OPCODE(LSHF) */
+    14,    /*OPCODE(LEA)  */
+    0,    /*OPCODE(NOP)   */
+    9,    /*OPCODE(NOT)   */
+    12,    /*OPCODE(RET)   */
+    13,    /*OPCODE(RSHFL)   */
+    13,    /*OPCODE(RSHFA)   */
+    8,    /*OPCODE(RTI)   */
+    3,    /*OPCODE(STB)   */
+    7,    /*OPCODE(STW)   */
+    15,    /*OPCODE(TRAP)   */
+    9    /*OPCODE(XOR)   */
 };
-//end SOURCE1
+/*SOURCE1*/
 
-//GLOBAL VARIABLES
+/*GLOBAL VARIABLES*/
 FILE *fileIn = NULL;
 FILE *fileOut = NULL;
 char* fileOutName = NULL;
@@ -137,8 +139,9 @@ struct Label {
   uint16_t line;
 };
 
-//FUNCTION PROTOTYPES
+/*FUNCTION PROTOTYPES*/
 bool isLabelValid(char* label);
+bool isLabel(char* label);
 enum OPCODE getOpcode(char* opcode);
 int getPseudoOp(char* pseudoOp);
 void output(uint16_t output);
@@ -149,11 +152,9 @@ uint16_t RegisterToInt(char* reg);
 void main_1stPass(void);
 void main_2ndPass(void);
 void verifyOriginFound(void);
-char* getToken(char* string, char* delimiters);
 void verifyBitLength(int num, int maxBits, bool isSigned);
-char* formatLine(char* string);
 int labelToLineNumber(char* label);
-int  readAndParse( FILE * pInfile, char * pLine, char ** pLabel, char ** pOpcode, char ** pArg1, char ** pArg2, char ** pArg3, char ** pArg4);
+int readAndParse( FILE * pInfile, char * pLine, char ** pLabel, char ** pOpcode, char ** pArg1, char ** pArg2, char ** pArg3, char ** pArg4);
 
 void error(int32_t errorCode, char* extraMessage) {
   switch(errorCode) {
@@ -180,8 +181,8 @@ void error(int32_t errorCode, char* extraMessage) {
   if(fileOut != NULL) {
     fclose(fileOut);
   }
-  fileOut = fopen(fileOutName, "w"); //TODO: change to non-magic string
-  fputs("", fileOut); //clear contents of the output file if there is an error
+  fileOut = fopen(fileOutName, "w"); /*TODO: change to non-magic string*/
+  fputs("", fileOut); /*clear contents of the output file if there is an error*/
   fclose(fileOut);
   free(fileOutName);
   exit(errorCode);
@@ -239,8 +240,25 @@ int getPseudoOp(char* label) {
   return pOp;
 }
 
+/*
+True if input label exists in the label Table
+*/
+bool isLabel(char* label) {
+  int i;
+  struct Label l;
+  bool result = false;
+  for(i = 0; i < labelTableLength; i++) {
+    l = labelTable[i];
+    if(strcmp(label, l.name) == 0) {
+      result = true;
+      break;
+    }
+  }
+  return result;
+}
+
 void addLabel(char* label, int line) {
-  if(labelToLineNumber(label) != -1) {
+  if(isLabel(label)) {
     sprintf(errorMessage, "Label %s already exists", label);
     error(4, errorMessage);
     return;
@@ -275,6 +293,10 @@ int labelToLineNumber(char* label) {
       break;
     }
   }
+  if(result == -1) {
+    sprintf(errorMessage, "label %s doesn't exist", label);
+    error(1, errorMessage);
+  }
   return result;
 }
 
@@ -294,7 +316,7 @@ void verifyBitLength(int num, int maxBits, bool isSigned) {
     }
   } else {
     if(num < 0) {
-      if(num*-2 >= max) {
+      if(num*-2 > max) {
         sprintf(errorMessage, "%d literal is too low. Min = %d. ", num, (max>>1)*-1);
         throwError = true;
       }
@@ -319,14 +341,14 @@ int toLiteral(char* literal, uint8_t maxBits, bool isSigned) {
   int i;
   bool throwError = false;
   if(literal[0] == 'X') {
-    num = hexToInt(literal+1); //skip the x
+    num = hexToInt(literal+1); /*skip the x*/
   } else if (literal[0] == '#') {
     num = decToInt(literal+1);
   } else {
     sprintf(errorMessage, "%s literal is not formatted correctly", literal);
     throwError = true;
   }
-  // check if within bounds
+  /* check if within bounds*/
   verifyBitLength(num, maxBits, isSigned);
   if(throwError) {
     error(3, errorMessage);
@@ -395,8 +417,10 @@ void main_1stPass(void) {
             }
             break;
           case FILL:
+            verifyOriginFound();
             break;
           case END:
+            verifyOriginFound();
             return;
             break;
            default:
@@ -407,7 +431,7 @@ void main_1stPass(void) {
         sprintf(errorMessage, "%s", opcode);
         error(2, errorMessage);
       }
-      verifyOriginFound();    //first meaningful line has to be .ORIG
+      verifyOriginFound();    /*first meaningful line has to be .ORIG*/
       if(isLabelValid(label) && (strcmp(label, "") != 0)) {
         addLabel(label, lineNumber);
       }
@@ -426,48 +450,6 @@ void verifyEndOfLine(char* string, char* delimiters) {
   }
 }
 
-char* getToken(char* string, char* delimiters) {
-  token = strtok(string, delimiters);
-  int i = 0;
-  for(i = 0; i < strlen(token); i++) {
-    if(token[i] >= 'a' && token[i] <= 'z') {
-      token[i] -= 'a' - 'A';
-    }
-    //token[i] == toUpper(token[i]);
-  }
-  return token;
-}
-
-char* trimWhiteSpace(char* string) {
-  int i = 0;
-  int offset = 0;
-  for(i = strlen(string) - 1; i >= 0; i--) {
-    if(string[i] == ' ' || string[i] == 't' || string[i] == '\n') {
-      string[i] = '\0';
-    } else {
-      break;
-    }
-  }
-
-  for(i = 0; i < strlen(string); i++) {
-    if(string[i] == ' ' || string[i] == 't' || string[i] == '\n') {
-      offset++;
-    } else {
-      break;
-    }
-  }
-  return string + offset;
-}
-
-char* formatLine(char* string) {
-  if(string != "") {
-    handleComments(string);
-    if(string != "")
-      string = trimWhiteSpace(string);
-  }
-  return string;
-}
-
 /*
 all pseudo-op/orig/end formatting is handled, I just need to have the line start counting from where
 .ORIG is and handle .END/.FILL
@@ -476,7 +458,7 @@ void main_2ndPass(void) {
 
 /* Note: MAX_LINE_LENGTH, OK, EMPTY_LINE, and DONE are defined values */
 
-//To call readAndParse, you would use the following:
+/*To call readAndParse, you would use the following:*/
   char string[MAX_LINE_LENGTH + 1], *label, *opcode, *a, *b, *c, *d;
   int lRet;
   char* empty;
@@ -490,7 +472,7 @@ void main_2ndPass(void) {
             continue;
             break;
           case FILL:
-            result = toLiteral(a, 16, UNSIGNED);  //FIXME: ".FILL can take a signed number or an unsigned number"
+            result = toLiteral(a, 16, UNSIGNED);  /*FIXME: ".FILL can take a signed number or an unsigned number"*/
             empty = b;
             break;
           case END:
@@ -584,7 +566,7 @@ void main_2ndPass(void) {
             break;
           case RTI:
           case NOP:
-            //RTI & NOP is just the opcode and all 0s after that, so nothing extra needed
+            /*RTI & NOP is just the opcode and all 0s after that, so nothing extra needed*/
             break;
           case LSHF:
           case RSHFL:
@@ -640,7 +622,7 @@ bool isLabelValid(char* label) {
     error(4, errorMessage);
   } else {
     int i = 0;
-    while(label[i] != NULL) {
+    while(label[i] != '\0') {
       if(!isalnum(label[i])) {
         valid = false;
         sprintf(errorMessage, "label %s is not alphanumeric", label);
@@ -725,7 +707,7 @@ int hexToInt(char* hex) {
     end = 1;
   }
 
-  for(i = strlen(hex)-1; i >= end; i--) {  // end skips the 'x' (and if negative '-') character(s)
+  for(i = strlen(hex)-1; i >= end; i--) {  /* end skips the 'x' (and if negative '-') character(s)*/
     if(hex[i] >= '0' && hex[i] <= '9') {
       constant = ASCIINUM;
     } else if (hex[i] >= 'A' && hex[i] <= 'F') {
@@ -765,7 +747,7 @@ int decToInt(char* dec) {
   }
   sprintf(errorMessage, "%s is a bad dec literal. Needs form of \"#-XXXXX\" - optional",dec);
 
-  for(i = strlen(dec)-1; i >= end; i--) {  // end skips the 'x' (and if negative '-') character(s)
+  for(i = strlen(dec)-1; i >= end; i--) {  /* end skips the 'x' (and if negative '-') character(s)*/
     if(dec[i] >= '0' && dec[i] <= '9') {
       constant = ASCIINUM;
     } else {
@@ -783,10 +765,8 @@ int decToInt(char* dec) {
 }
 
 
-
-
 /*
-BEGIN Source 2: http://users.ece.utexas.edu/~patt/15s.460N/labs/lab1/Lab1Functions.html
+BEGIN Source 2: http:/*users.ece.utexas.edu/~patt/15s.460N/labs/lab1/Lab1Functions.html
 */
 
 int  readAndParse( FILE * pInfile, char * pLine, char ** pLabel, char ** pOpcode, char ** pArg1, char ** pArg2, char ** pArg3, char ** pArg4) {
@@ -811,7 +791,7 @@ int  readAndParse( FILE * pInfile, char * pLine, char ** pLabel, char ** pOpcode
   if( !(lPtr = strtok( pLine, "\t\n\r ," ) ) ) 
   return( EMPTY_LINE );
 
-  if( getOpcode( lPtr ) == -1 && lPtr[0] != '.' ) /* found a label */    //FIXME: ADD isOpcode function
+  if( getOpcode( lPtr ) == -1 && lPtr[0] != '.' ) /* found a label */   
   {
   *pLabel = lPtr;
   if( !( lPtr = strtok( NULL, "\t\n\r ," ) ) ) return( OK );
@@ -837,5 +817,5 @@ int  readAndParse( FILE * pInfile, char * pLine, char ** pLabel, char ** pOpcode
   return( OK );
 }
 /*
-END Source 2: http://users.ece.utexas.edu/~patt/15s.460N/labs/lab1/Lab1Functions.html
+END Source 2: http:/*users.ece.utexas.edu/~patt/15s.460N/labs/lab1/Lab1Functions.html
 */

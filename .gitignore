@@ -1,4 +1,5 @@
 *.obj
 *.txt
 *.pdf
+*.out
 assemble

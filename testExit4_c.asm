@@ -1,0 +1,3 @@
+.ORIG x1001
+ADD R1, #2, R3
+.END
