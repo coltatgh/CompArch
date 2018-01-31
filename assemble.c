@@ -152,7 +152,7 @@ uint16_t RegisterToInt(char* reg);
 void main_1stPass(void);
 void main_2ndPass(void);
 void verifyOriginFound(void);
-void verifyBitLength(int num, int maxBits, bool isSigned);
+void verifyBitLength(int num, int maxBits, bool isSigned, bool isOffset);
 int labelToLineNumber(char* label);
 int readAndParse( FILE * pInfile, char * pLine, char ** pLabel, char ** pOpcode, char ** pArg1, char ** pArg2, char ** pArg3, char ** pArg4);
 
@@ -301,7 +301,7 @@ int labelToLineNumber(char* label) {
 }
 
 
-void verifyBitLength(int num, int maxBits, bool isSigned) {
+void verifyBitLength(int num, int maxBits, bool isSigned, bool isOffset) {
   int max = 1 << maxBits;
   bool throwError = false;
   if(!isSigned) {
@@ -328,7 +328,11 @@ void verifyBitLength(int num, int maxBits, bool isSigned) {
     }
   }
   if(throwError) {
-    error(3, errorMessage);
+    if(isOffset) {
+      error(4, errorMessage);
+    } else {
+      error(3, errorMessage);
+    }
   }
 }
 
@@ -349,7 +353,7 @@ int toLiteral(char* literal, uint8_t maxBits, bool isSigned) {
     throwError = true;
   }
   /* check if within bounds*/
-  verifyBitLength(num, maxBits, isSigned);
+  verifyBitLength(num, maxBits, isSigned, false);
   if(throwError) {
     error(3, errorMessage);
   }
@@ -413,6 +417,10 @@ void main_1stPass(void) {
             if(!originFound) {
               originFound = true;
               startAddress = toLiteral(a, 16, UNSIGNED);
+              if((startAddress % 2) != 0) {
+                sprintf(errorMessage, "start address %d must be word-aligned (even)", startAddress);
+                error(3, errorMessage);
+              }
               output(startAddress);
             }
             break;
@@ -507,7 +515,7 @@ void main_2ndPass(void) {
           case BRZP:
           case BRNZP:
             tmp = labelToLineNumber(a) - (lineNumber + 2);
-            verifyBitLength(tmp, 9, SIGNED);
+            verifyBitLength(tmp, 9, SIGNED, true);
             result |= (tmp & 0x1FF);
             if(opC == BRN || opC == BRNZ || opC == BRNP || opC == BRNZP || opC == BR) {
               result += (1<<11);
@@ -533,7 +541,7 @@ void main_2ndPass(void) {
           case JSR:
             result += 1<<11;
             tmp = labelToLineNumber(a) - (lineNumber + 2);
-            verifyBitLength(tmp, 11, SIGNED);
+            verifyBitLength(tmp, 11, SIGNED, true);
             result |= (tmp & 0x7FF);
             empty = b;
             break;
@@ -550,7 +558,7 @@ void main_2ndPass(void) {
           case LEA:
             result += (RegisterToInt(a) << 9);
             tmp = labelToLineNumber(b) - (lineNumber + 2);
-            verifyBitLength(tmp, 9, SIGNED);
+            verifyBitLength(tmp, 9, SIGNED, true);
             result |= (tmp & 0x1FF);
             empty = c;
             break;
@@ -566,6 +574,7 @@ void main_2ndPass(void) {
             break;
           case RTI:
           case NOP:
+            empty = a;
             /*RTI & NOP is just the opcode and all 0s after that, so nothing extra needed*/
             break;
           case LSHF:

@@ -1,3 +1,3 @@
-.ORIG x1001
+.ORIG x1000
 ABC
 .END

@@ -1,3 +1,3 @@
-.ORIG x1001
+.ORIG x1002
 LEA R1, x100
 .END
