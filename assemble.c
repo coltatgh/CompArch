@@ -179,11 +179,11 @@ void error(int32_t errorCode, char* extraMessage) {
     printf("%s", extraMessage);
   }
   printf("\n\n");
+  fflush(fileOut); /* NEEDED THIS*/
   if(fileOut != NULL) {
     fclose(fileOut);
   }
-  fileOut = fopen(fileOutName, "w"); /*TODO: change to non-magic string*/
-  fputs("", fileOut); /*clear contents of the output file if there is an error*/
+  fileOut = fopen(fileOutName, "w");
   fclose(fileOut);
   free(fileOutName);
   exit(errorCode);
@@ -374,7 +374,7 @@ void main(int32_t argc, char* argv[]) {
   if(argc == 3) {
     fileIn = fopen(argv[1], "r");
     fileOut = fopen(argv[2], "w");
-    fileOutName = malloc(sizeof(argv[2]) + 1);
+    fileOutName = malloc(strlen(argv[2]) + 1);
     strcpy(fileOutName, argv[2]);
   } else {
     error(4, "Invalid input arguments expected ./assemble <input>.asm <output>.obj");
@@ -424,7 +424,6 @@ void main_1stPass(void) {
                 sprintf(errorMessage, "start address %d must be word-aligned (even)", startAddress);
                 error(3, errorMessage);
               }
-              output(startAddress);
             }
             break;
           case FILL:
