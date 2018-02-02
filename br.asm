@@ -1,6 +1,0 @@
-		.ORIG x3000 ; Start Address is x3000			
-		BRN TEST
-		BRZ TEST
-		BRP TEST
-TEST	ADD R2,R2,R2
-		.END

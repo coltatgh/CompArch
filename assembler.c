@@ -1,13 +1,9 @@
 /*
-WHOLE ASSEMBLY PROCESS IS CASE INSENSITIVE
-
-LABEL VALUES = offset/2 (because 16bit addressable)
-
-RENAME labeltable.offset to line# 
-
-result += offset = currentLine - labelLine
+Name 1: Karl Solomon
+Name 2: Colton Lewis
+UTEID 1: kws653
+UTEID 2: ctl492 
 */
-
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -424,6 +420,7 @@ void main_1stPass(void) {
                 sprintf(errorMessage, "start address %d must be word-aligned (even)", startAddress);
                 error(3, errorMessage);
               }
+              output(startAddress);
             }
             break;
           case FILL:
@@ -609,7 +606,6 @@ void main_2ndPass(void) {
   } while( lRet != DONE );
   return;
 }
-
 /*
 Checks what is expected to be a label. This is used in the first pass, before storing a label in the label map.
 In the second pass should lookup labels in that map
@@ -635,13 +631,19 @@ bool isLabelValid(char* label) {
         error(4, errorMessage);
         break;
       }
+      if(i >= 20) {
+        valid = false;
+        sprintf(errorMessage, "label %s is greater than 20 characters", label);
+        error(4, errorMessage);
+        break;
+      }
       i++;
     }
   }
   if(strcmp("IN", label) == 0 || strcmp("OUT", label) == 0 || strcmp("GETC", label) == 0 || strcmp("PUTS", label) == 0) {
     valid = false;
     sprintf(errorMessage, "label %s is an opcode", label);
-    error(1, errorMessage);
+    error(4, errorMessage);
   }
   if(getOpcode(label) != -1) {
     valid = false;
