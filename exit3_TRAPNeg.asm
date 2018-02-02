@@ -1,0 +1,4 @@
+	.ORIG #4096
+	TRAP x-1
+	LSHF R0, R0, #-1
+	.END
