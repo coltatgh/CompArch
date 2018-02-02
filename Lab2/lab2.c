@@ -58,6 +58,23 @@ void writeRegister(uint16_t registerNumber, uint16_t newValue) {
 	System_Latches.REGS[registerNumber] = newValue;
 }
 
+uint16_t signExtend(uint16_t number, uint16_t numBits) {
+	if(number & (1 << (numBits-1))) {
+		number &= 0xFFFF;
+	} else {
+		number |= 0x0000;
+	}
+	return number;
+}
+
+void writeDR(uint16_t instruction, uint16_t result) {
+	writeRegister(maskInstruction(instruction, 9,11) >> 9, result);
+}
+
+void writeBaseR(uint16_t instruction, uint16_t result) {
+	writeRegister(maskInstruction(instruction, 6,8) >> 6, result);
+}
+
 void execute(uint16_t instruction) {
 	uint8_t opcode = (instruction & OPCODE_MASK) >> 12;
 	uint16_t r1 = readRegister(maskInstruction(instruction, 9,11));
@@ -66,12 +83,16 @@ void execute(uint16_t instruction) {
 	uint16_t bit5Mask = maskInstruction(instruction, 5,5);
 	uint16_t bit4Mask = maskInstruction(instruction, 4,4);
 	uint16_t bit11Mask = maskInstruction(instruction, 11,11);
-
-
-
+	uint16_t imm5 = maskInstruction(instruction, 0,4);
+	uint16_t result;
 	switch(opcode) {
 		case ADD:
-			if()
+			if(bit5Mask) {
+				result = r2 + signExtend(imm5);
+			} else {
+				result = r2 + r3;
+			}
+			writeDR(instruction, result);
 		break;
 		case AND:
 		break;
