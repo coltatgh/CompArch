@@ -544,8 +544,8 @@ void main_2ndPass(void) {
             result |= (tmp & 0x7FF);
             break;
           case LDB:
-          case LDW:
           case STB:
+          case LDW: /*word-aligned needs handling later*/
           case STW:
             verifyNumberOfOperands(a, b, c, d, 3);
             result += (RegisterToInt(a) << 9);
