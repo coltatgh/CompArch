@@ -479,7 +479,7 @@ void main_2ndPass(void) {
             continue;
             break;
           case FILL:
-            result = toLiteral(a, 16, UNSIGNED);  /*FIXME: ".FILL can take a signed number or an unsigned number"*/
+            result = toLiteral(a, 16, SIGNED);  /*FIXME: ".FILL can take a signed number or an unsigned number"*/
             break;
           case END:
             return;
