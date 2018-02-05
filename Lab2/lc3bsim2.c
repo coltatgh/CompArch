@@ -1,9 +1,9 @@
 ﻿/*
    REFER TO THE SUBMISSION INSTRUCTION FOR DETAILS
 
-   Name 1: Full name of the first partner 
-   Name 2: Full name of the second partner
-   UTEID 1: UT EID of the first partner
+   Name 1: Karl Solomon
+   Name 2: Colton Lewis
+   UTEID 1: Kws653
    UTEID 2: UT EID of the second partner
 */
 
@@ -43,6 +43,8 @@ void process_instruction();
 /* Use this to avoid overflowing 16 bits on the bus.           */
 /***************************************************************/
 #define Low16bits(x) ((x) & 0xFFFF)
+#define Low8bits(x)  ((x)  & 0xFF)
+#define High8bits(x)  ((x)  & 0xFF00)
 
 /***************************************************************/
 /* Main memory.                                                */
@@ -55,8 +57,31 @@ void process_instruction();
 int MEMORY[WORDS_IN_MEM][2];
 
 /***************************************************************/
-
+/*Opcode handling                                              */
 /***************************************************************/
+#define OPCODE_MASK 0xF000
+#define N 0x0800
+#define Z 0x0400
+#define P 0x0200
+
+enum OPCODES {
+  BR_NOP, /*BR, NOP*/
+  ADD,
+  LDB,
+  STB,
+  JSR_R, /*JSR, JSRR*/
+  AND,
+  LDW,
+  STW,
+  RTI,
+  XOR_NOT, /*XOR, NOT*/
+  UNUSED,
+  UNUSED2,
+  JMP,
+  SHF,
+  LEA,
+  TRAP
+};
 
 /***************************************************************/
 /* LC-3b State info.                                           */
@@ -109,7 +134,6 @@ void help() {
 /*                                                             */
 /***************************************************************/
 void cycle() {                                                
-
  process_instruction();
  CURRENT_LATCHES = NEXT_LATCHES;
  INSTRUCTION_COUNT++;
@@ -414,6 +438,220 @@ void process_instruction(){
   *       -Decode 
   *       -Execute
   *       -Update NEXT_LATCHES
-  */     
+  */
 
+  execute(instruction);
+}
+
+/*
+returns a bitmask of instruction from startBit to endBit (inclusive) that has been shifted into the least significant bits
+*/
+uint16_t maskAndShiftDown(uint16_t instruction, uint16_t startBit, uint16_t endBit) {
+  int result = 0;
+  int i = 0;
+  for(i = 0; i <= (endBit-startBit); i++) {
+    result <<=1;
+    result |= 1;
+  }
+  result <<= startBit;
+  instruction = instruction & result;
+  instruction >>= startBit;
+  return instruction;
+}
+
+uint16_t readRegister(uint16_t registerNumber) {
+  return System_Latches.REGS[registerNumber];
+}
+
+void writeRegister(uint16_t registerNumber, uint16_t newValue) {
+  System_Latches.REGS[registerNumber] = newValue;
+}
+
+int16_t signExtend(uint16_t signedNumber, uint16_t bitsOccupied) {
+  int16_t result = 0;
+  if(signedNumber & (1 << (bitsOccupied-1))) { /*negative*/
+    /*take 2s compliement*/
+    signedNumber ~= signedNumber;
+    signedNumber += 1;
+  }
+  return (int16_t) signedNumber;
+}
+
+void verifyAlignedAddress(uint16_t address, bool isByte) {
+  if(isByte) {
+    if(address >= 2*WORDS_IN_MEM) {
+      printf("ERROR: unaligned memory access at %d\n", address);
+    }
+  } else {
+    if(address % 2 || address >= WORDS_IN_MEM) {
+      printf("ERROR: unaligned memory access at %d\n", address);
+    }
+  }
+}
+
+uint16_t readWord(uint16_t address) {
+  verifyAlignedAddress(address, FALSE);
+  uint16_t word;
+  word = Low16bits(MEMORY[address + i][1]);
+  word <<= 8;
+  word += Low16bits(MEMORY[address + i][0]);
+  return word;
+}
+
+uint16_t readByte(uint16_t address) {
+  verifyAlignedAddress(address, TRUE);
+  uint16_t byte;
+  if(address % 2)
+    byte = Low16bits(MEMORY[address][1]);
+  else
+    byte = Low16bits(MEMORY[address][0]);
+  return byte;
+}
+
+void writeWord(uint16_t address, uint16_t word) {
+  verifyAlignedAddress(address, FALSE);
+  MEMORY[address][1] = High8bits(word);
+  MEMORY[address][0] = Low8bits(word);
+}
+
+/*Input byte should be formatted in the least significant byte*/
+void writeByte(uint16_t address, uint16_t byte) {
+  verifyAlignedAddress(address, TRUE);
+  if(address % 2)
+    MEMORY[address][1] = Low8bits(byte);
+  else
+    MEMORY[address][0] = Low8bits(byte);
+}
+
+void incrementPC(void) {
+  System_Latches.PC += 2;
+}
+
+/* likely need to handle doing operations with numbers that I SEXT, but are cast as uint16_t*/
+void execute(uint16_t instruction) {
+  uint8_t opcode = (instruction & OPCODE_MASK) >> 12;
+  uint16_t dr = maskAndShiftDown(instruction, 9, 11);
+  uint16_t r1 = readRegister(dr);
+  uint16_t r2 = readRegister(maskAndShiftDown(instruction, 6,8));
+  uint16_t r3 = readRegister(maskAndShiftDown(instruction, 0,2));
+  uint16_t bit5Mask = maskAndShiftDown(instruction, 5,5);
+  uint16_t bit4Mask = maskAndShiftDown(instruction, 4,4);
+  uint16_t bit11Mask = maskAndShiftDown(instruction, 11,11);
+  uint16_t imm5 = maskAndShiftDown(instruction, 0,4);
+  uint16_t imm4 = maskAndShiftDown(instruction, 0,3);
+  uint16_t imm6 = maskAndShiftDown(instruction, 0,5);
+  uint16_t PCOffset9 = maskAndShiftDown(instruction, 0, 8);
+  uint16_t result;
+  switch(opcode) {
+    case ADD:
+      if(bit5Mask) {
+        result = r2 + signExtend(imm5);
+      } else {
+        result = r2 + r3;
+      }
+      writeRegister(dr, result);
+    break;
+    case AND:
+      if(bit5Mask) {
+        result = r2 & signExtend(imm5);
+      } else {
+        result = r2 & r3;
+      }
+      writeRegister(dr, result);
+    break;
+    case BR_NOP:
+      /*r1 contains nzp bits*/
+      if(r1) {
+        /*BR*/
+        bool branch = false;
+        if(instruction & N) {
+          if(System_Latches.N) {
+            branch = true;
+          }
+        }
+        if(instruction & Z) {
+          if(System_Latches.Z) {
+            branch = true;
+          }
+        }
+        if(instruction & P) {
+          if(System_Latches.P) {
+            branch = true;
+          }
+        }
+        int16_t offset = signExtend(PCOffset9);
+        System_Latches.PC += (offset +1);
+      } else {
+        /*NOP*/
+      }
+    break;
+    case JMP: /*works for JMP & RET b/c in RET r2 is just R7*/
+      System_Latches.PC = r2;
+    break;
+    case JSR_R:
+      System_Latches.PC++;
+      writeRegister(7, System_Latches.PC);
+      if(instruction & (1<<11)) {
+        /*JSR*/
+        int16_t PCOffset11 = signExtend(maskAndShiftDown(instruction, 0, 10));
+        System_Latches.PC += (PCOffset11 << 1);
+      } else {
+        /*JSRR*/        
+        System_Latches.PC = r2;
+      }
+    break;
+    case LDB:
+    /*8-bit contents of memory at this address are sign-extended and stored into DR*/
+      r1 = signExtend(readByte(r2 + signExtend(imm6)));
+      writeRegister(dr, r1);
+    break;
+    case LDW:
+      r1 = readWord(r2 + (signExtend(imm6) << 1))
+      writeRegister(dr, r1);
+    break;
+    case LEA:
+      incrementPC();
+      r1 = System_Latches.PC + (signExtend(imm9) << 1);
+      writeRegister(dr, r1);
+    break;
+    case RTI:
+    break;
+    case SHF:
+      if((instruction & (1<<4)) == 0)
+        r2 <<= imm4;
+      else if ((instruction & (1<<5)) == 0)
+        r2 >>= imm4;
+      else {
+        int i = 0;
+        uint16_t firstBit = instruction & 0x8000;
+        for(i = 0; i < imm4; i++) {
+          r2 >>= 1;
+          r2 |= firstBit;
+        }
+      }
+      r1 = r2;
+      writeRegister(dr, r1);
+    break;
+    case STB:
+      writeByte(r2 + signExtend(imm6), r1);
+    break;
+    case STW:
+      writeWord(r2 + (signExtend(imm6) << 1), r1);
+    break;
+    case TRAP:
+      PC+=2;
+      writeRegister(7, PC);
+      System_Latches.PC = readWord(maskAndShiftDown(instruction, 0,7) << 1);
+    break;
+    case XOR_NOT:
+      if(instruction & (1<<5)) {
+        r1 = r2 ^ signExtend(imm5);
+      } else {
+        r1 = r2 ^ r3;
+      }
+      writeRegister(dr, r1);
+    break;
+    default:
+    break;
+  }
 }
