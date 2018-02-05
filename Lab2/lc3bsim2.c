@@ -615,6 +615,8 @@ void execute(uint16_t instruction) {
       writeRegister(dr, r1);
     break;
     case RTI:
+    /*You do not have to implement the RTI instruction for this lab. You can assume that the
+    input file to your simulator will not contain any RTI instructions*/
     break;
     case SHF:
       if((instruction & (1<<4)) == 0)
