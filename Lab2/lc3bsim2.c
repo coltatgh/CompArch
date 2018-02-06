@@ -50,7 +50,7 @@ void process_instruction();
 /* Main memory.                                                */
 /***************************************************************/
 /* MEMORY[A][0] stores the least significant byte of word at word address A
-  MEMORY[A][1] stores the most significant byte of word at word address A 
+   MEMORY[A][1] stores the most significant byte of word at word address A 
 */
 
 #define WORDS_IN_MEM    0x08000 
@@ -429,7 +429,6 @@ int main(int argc, char *argv[]) {
 /***************************************************************/
 
 
-
 void process_instruction(){
  /*  function: process_instruction
   *  
@@ -471,13 +470,13 @@ int16_t signExtend(uint16_t signedNumber, uint16_t bitsOccupied) {
   int16_t result = 0;
   if(signedNumber & (1 << (bitsOccupied-1))) { /*negative*/
     /*take 2s compliement*/
-    signedNumber ~= signedNumber;
+    signedNumber = ~signedNumber;             // Colton: ~ is a unary operator [resolved]
     signedNumber += 1;
   }
-  return (int16_t) signedNumber;
+  return (int16_t) signedNumber;          // Colton: compare this to piazza
 }
 
-void verifyAlignedAddress(uint16_t address, bool isByte) {
+void verifyAlignedAddress(uint16_t address, bool isByte) {        // Colton: see handout clarification #3
   if(isByte) {
     if(address >= 2*WORDS_IN_MEM) {
       printf("ERROR: unaligned memory access at %d\n", address);
@@ -492,7 +491,7 @@ void verifyAlignedAddress(uint16_t address, bool isByte) {
 uint16_t readWord(uint16_t address) {
   verifyAlignedAddress(address, FALSE);
   uint16_t word;
-  word = Low16bits(MEMORY[address + i][1]);
+  word = Low16bits(MEMORY[address + i][1]);   // Colton: WTF IS i???
   word <<= 8;
   word += Low16bits(MEMORY[address + i][0]);
   return word;
@@ -502,9 +501,9 @@ uint16_t readByte(uint16_t address) {
   verifyAlignedAddress(address, TRUE);
   uint16_t byte;
   if(address % 2)
-    byte = Low16bits(MEMORY[address][1]);
-  else
-    byte = Low16bits(MEMORY[address][0]);
+    byte = Low8bits(MEMORY[address][1]);  // Colton: why is this low16bits not low8bits? [resolved]
+  else                                    // Does it have to do with SEXT?
+    byte = Low8bits(MEMORY[address][0]);
   return byte;
 }
 
@@ -611,7 +610,7 @@ void execute(uint16_t instruction) {
     break;
     case LEA:
       incrementPC();
-      r1 = System_Latches.PC + (signExtend(imm9) << 1);
+      r1 = System_Latches.PC + (signExtend(PCOffset9) << 1);     //Colton: imm9 never defined
       writeRegister(dr, r1);
     break;
     case RTI:
