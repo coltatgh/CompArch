@@ -488,12 +488,12 @@ void verifyAlignedAddress(uint16_t address, bool isByte) {        // Colton: see
   }
 }
 
-uint16_t readWord(uint16_t address) {
-  verifyAlignedAddress(address, FALSE);
-  uint16_t word;
-  word = Low16bits(MEMORY[address + i][1]);   // Colton: WTF IS i???
+uint16_t readWord(uint16_t address) {         // Colton: all memory accesses must be updated to accomodate
+  verifyAlignedAddress(address, FALSE);       //         the fact that address X is found in MEMORY[X/2], etc.
+  uint16_t word;                              //         [resolved]
+  word = Low16bits(MEMORY[address/2][1]);     
   word <<= 8;
-  word += Low16bits(MEMORY[address + i][0]);
+  word += Low16bits(MEMORY[address/2][0]);    // Colton: WTF IS i??? USed to say 'address + i' instead of 'address/2'
   return word;
 }
 
@@ -501,32 +501,32 @@ uint16_t readByte(uint16_t address) {
   verifyAlignedAddress(address, TRUE);
   uint16_t byte;
   if(address % 2)
-    byte = Low8bits(MEMORY[address][1]);  // Colton: why is this low16bits not low8bits? [resolved]
-  else                                    // Does it have to do with SEXT?
-    byte = Low8bits(MEMORY[address][0]);
+    byte = Low8bits(MEMORY[address/2][1]);  // Colton: why is this low16bits not low8bits? [resolved]
+  else                                      // Does it have to do with SEXT? Don't you SEXT after anyways?
+    byte = Low8bits(MEMORY[address/2][0]);
   return byte;
 }
 
 void writeWord(uint16_t address, uint16_t word) {
   verifyAlignedAddress(address, FALSE);
-  MEMORY[address][1] = High8bits(word);
-  MEMORY[address][0] = Low8bits(word);
+  MEMORY[address/2][1] = High8bits(word);
+  MEMORY[address/2][0] = Low8bits(word);
 }
 
 /*Input byte should be formatted in the least significant byte*/
 void writeByte(uint16_t address, uint16_t byte) {
   verifyAlignedAddress(address, TRUE);
   if(address % 2)
-    MEMORY[address][1] = Low8bits(byte);
+    MEMORY[address/2][1] = Low8bits(byte);
   else
-    MEMORY[address][0] = Low8bits(byte);
+    MEMORY[address/2][0] = Low8bits(byte);
 }
 
 void incrementPC(void) {
   System_Latches.PC += 2;
 }
 
-/* likely need to handle doing operations with numbers that I SEXT, but are cast as uint16_t*/
+/* likely need to handle doing operations with numbers that I SEXT, but that are cast as uint16_t*/
 void execute(uint16_t instruction) {
   uint8_t opcode = (instruction & OPCODE_MASK) >> 12;
   uint16_t dr = maskAndShiftDown(instruction, 9, 11);
