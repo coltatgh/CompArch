@@ -20,6 +20,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 /***************************************************************/
 /*                                                             */
@@ -53,16 +55,16 @@ void process_instruction();
    MEMORY[A][1] stores the most significant byte of word at word address A 
 */
 
-#define WORDS_IN_MEM    0x08000 
+#define WORDS_IN_MEM    (0x08000) 
 int MEMORY[WORDS_IN_MEM][2];
 
 /***************************************************************/
 /*Opcode handling                                              */
 /***************************************************************/
 #define OPCODE_MASK 0xF000
-#define N 0x0800
-#define Z 0x0400
-#define P 0x0200
+#define Nbit 0x0800
+#define Zbit 0x0400
+#define Pbit 0x0200
 
 enum OPCODES {
   BR_NOP, /*BR, NOP*/
@@ -77,7 +79,7 @@ enum OPCODES {
   XOR_NOT, /*XOR, NOT*/
   UNUSED,
   UNUSED2,
-  JMP,
+  JMP_RET,
   SHF,
   LEA,
   TRAP
@@ -91,18 +93,17 @@ enum OPCODES {
 int RUN_BIT;        /* run bit */
 
 
-typedef struct System_Latches_Struct{
-
+typedef struct System_Latches_Struct {
  int PC,                /* program counter */
-   N,                /* n condition bit */
-   Z,                /* z condition bit */
-   P;                /* p condition bit */
+ N,                /* n condition bit */
+ Z,                /* z condition bit */
+ P;                /* p condition bit */
  int REGS[LC_3b_REGS]; /* register file. */
 } System_Latches;
 
 /* Data Structure for Latch */
 
-System_Latches CURRENT_LATCHES, NEXT_LATCHES;
+System_Latches CURRENT_LATCHES, NEXT_LATCHES;  /*Karl: when to use CURRENT_LATCHES VS NEXT_LATCHES IN SWITCH STATEMENT???*/
 
 /***************************************************************/
 /* A cycle counter.                                            */
@@ -438,8 +439,6 @@ void process_instruction(){
   *       -Execute
   *       -Update NEXT_LATCHES
   */
-
-  execute(instruction);
 }
 
 /*
@@ -459,63 +458,48 @@ uint16_t maskAndShiftDown(uint16_t instruction, uint16_t startBit, uint16_t endB
 }
 
 uint16_t readRegister(uint16_t registerNumber) {
-  return System_Latches.REGS[registerNumber];
+  int reg = CURRENT_LATCHES.REGS[registerNumber];
+  reg = Low16bits(reg);
+  return reg;
 }
 
 void writeRegister(uint16_t registerNumber, uint16_t newValue) {
-  System_Latches.REGS[registerNumber] = newValue;
+  CURRENT_LATCHES.REGS[registerNumber] = newValue;
 }
 
 int16_t signExtend(uint16_t signedNumber, uint16_t bitsOccupied) {
   int16_t result = 0;
-  if(signedNumber & (1 << (bitsOccupied-1))) { /*negative*/
-    /*take 2s compliement*/
-    signedNumber = ~signedNumber;             // Colton: ~ is a unary operator [resolved]
+  if(signedNumber & (1 << (bitsOccupied-1))) {
+    signedNumber = ~signedNumber;             
     signedNumber += 1;
   }
-  return (int16_t) signedNumber;          // Colton: compare this to piazza
+  return (int16_t) signedNumber;          /* Colton: compare this to piazza  //Karl: compare whole function to piazza or what?*/
 }
 
-void verifyAlignedAddress(uint16_t address, bool isByte) {        // Colton: see handout clarification #3
-  if(isByte) {
-    if(address >= 2*WORDS_IN_MEM) {
-      printf("ERROR: unaligned memory access at %d\n", address);
-    }
-  } else {
-    if(address % 2 || address >= WORDS_IN_MEM) {
-      printf("ERROR: unaligned memory access at %d\n", address);
-    }
-  }
-}
-
-uint16_t readWord(uint16_t address) {         // Colton: all memory accesses must be updated to accomodate
-  verifyAlignedAddress(address, FALSE);       //         the fact that address X is found in MEMORY[X/2], etc.
-  uint16_t word;                              //         [resolved]
+uint16_t readWord(uint16_t address) {
+  uint16_t word;                              
   word = Low16bits(MEMORY[address/2][1]);     
   word <<= 8;
-  word += Low16bits(MEMORY[address/2][0]);    // Colton: WTF IS i??? USed to say 'address + i' instead of 'address/2'
+  word += Low16bits(MEMORY[address/2][0]);
   return word;
 }
 
 uint16_t readByte(uint16_t address) {
-  verifyAlignedAddress(address, TRUE);
   uint16_t byte;
   if(address % 2)
-    byte = Low8bits(MEMORY[address/2][1]);  // Colton: why is this low16bits not low8bits? [resolved]
-  else                                      // Does it have to do with SEXT? Don't you SEXT after anyways?
+    byte = Low8bits(MEMORY[address/2][1]);
+  else                                    
     byte = Low8bits(MEMORY[address/2][0]);
   return byte;
 }
 
 void writeWord(uint16_t address, uint16_t word) {
-  verifyAlignedAddress(address, FALSE);
   MEMORY[address/2][1] = High8bits(word);
   MEMORY[address/2][0] = Low8bits(word);
 }
 
 /*Input byte should be formatted in the least significant byte*/
 void writeByte(uint16_t address, uint16_t byte) {
-  verifyAlignedAddress(address, TRUE);
   if(address % 2)
     MEMORY[address/2][1] = Low8bits(byte);
   else
@@ -523,7 +507,7 @@ void writeByte(uint16_t address, uint16_t byte) {
 }
 
 void incrementPC(void) {
-  System_Latches.PC += 2;
+  CURRENT_LATCHES.PC += 2;
 }
 
 /* likely need to handle doing operations with numbers that I SEXT, but that are cast as uint16_t*/
@@ -539,12 +523,13 @@ void execute(uint16_t instruction) {
   uint16_t imm5 = maskAndShiftDown(instruction, 0,4);
   uint16_t imm4 = maskAndShiftDown(instruction, 0,3);
   uint16_t imm6 = maskAndShiftDown(instruction, 0,5);
-  uint16_t PCOffset9 = maskAndShiftDown(instruction, 0, 8);
+  uint16_t PCOffset9 = maskAndShiftDown(instruction, 0, 8);  
+  uint16_t PCOffset11 = maskAndShiftDown(instruction, 0, 10);
   uint16_t result;
   switch(opcode) {
     case ADD:
       if(bit5Mask) {
-        result = r2 + signExtend(imm5);
+        result = r2 + signExtend(imm5, 5);  /*Karl: do we need to typecase r2 to int16_t for the add to work right or nah? */
       } else {
         result = r2 + r3;
       }
@@ -552,7 +537,7 @@ void execute(uint16_t instruction) {
     break;
     case AND:
       if(bit5Mask) {
-        result = r2 & signExtend(imm5);
+        result = r2 & signExtend(imm5, 5);
       } else {
         result = r2 & r3;
       }
@@ -563,54 +548,54 @@ void execute(uint16_t instruction) {
       if(r1) {
         /*BR*/
         bool branch = false;
-        if(instruction & N) {
-          if(System_Latches.N) {
+        if(instruction & Nbit) {
+          if(CURRENT_LATCHES.N) {
             branch = true;
           }
         }
-        if(instruction & Z) {
-          if(System_Latches.Z) {
+        if(instruction & Zbit) {
+          if(CURRENT_LATCHES.Z) {
             branch = true;
           }
         }
-        if(instruction & P) {
-          if(System_Latches.P) {
+        if(instruction & Pbit) {
+          if(CURRENT_LATCHES.P) {
             branch = true;
           }
         }
-        int16_t offset = signExtend(PCOffset9);
-        System_Latches.PC += (offset +1);
+        int16_t offset = signExtend(PCOffset9, 9);
+        CURRENT_LATCHES.PC += (offset +1);
       } else {
-        /*NOP*/
+        /*NOP, do nothing*/
       }
     break;
-    case JMP: /*works for JMP & RET b/c in RET r2 is just R7*/
-      System_Latches.PC = r2;
+    case JMP_RET: /*works for JMP & RET b/c in RET r2 is just R7*/
+      CURRENT_LATCHES.PC = r2;
     break;
     case JSR_R:
-      System_Latches.PC++;
-      writeRegister(7, System_Latches.PC);
+      CURRENT_LATCHES.PC++;
+      writeRegister(7, CURRENT_LATCHES.PC);
       if(instruction & (1<<11)) {
         /*JSR*/
-        int16_t PCOffset11 = signExtend(maskAndShiftDown(instruction, 0, 10));
-        System_Latches.PC += (PCOffset11 << 1);
+        PCOffset11 = signExtend(PCOffset11, 11);
+        CURRENT_LATCHES.PC += (PCOffset11 << 1);
       } else {
         /*JSRR*/        
-        System_Latches.PC = r2;
+        CURRENT_LATCHES.PC = r2;
       }
     break;
     case LDB:
     /*8-bit contents of memory at this address are sign-extended and stored into DR*/
-      r1 = signExtend(readByte(r2 + signExtend(imm6)));
+      r1 = signExtend(readByte(r2 + signExtend(imm6, 6)),8);
       writeRegister(dr, r1);
     break;
     case LDW:
-      r1 = readWord(r2 + (signExtend(imm6) << 1))
+      r1 = readWord(r2 + (signExtend(imm6, 6) << 1));
       writeRegister(dr, r1);
     break;
     case LEA:
       incrementPC();
-      r1 = System_Latches.PC + (signExtend(PCOffset9) << 1);     //Colton: imm9 never defined
+      r1 = CURRENT_LATCHES.PC + (signExtend(PCOffset9, 9) << 1); 
       writeRegister(dr, r1);
     break;
     case RTI:
@@ -634,19 +619,19 @@ void execute(uint16_t instruction) {
       writeRegister(dr, r1);
     break;
     case STB:
-      writeByte(r2 + signExtend(imm6), r1);
+      writeByte(r2 + signExtend(imm6, 6), r1);
     break;
     case STW:
-      writeWord(r2 + (signExtend(imm6) << 1), r1);
+      writeWord(r2 + (signExtend(imm6,6) << 1), r1);
     break;
     case TRAP:
-      PC+=2;
-      writeRegister(7, PC);
-      System_Latches.PC = readWord(maskAndShiftDown(instruction, 0,7) << 1);
+      CURRENT_LATCHES.PC+=2;
+      writeRegister(7, CURRENT_LATCHES.PC);
+      CURRENT_LATCHES.PC = readWord(maskAndShiftDown(instruction, 0,7) << 1);
     break;
     case XOR_NOT:
       if(instruction & (1<<5)) {
-        r1 = r2 ^ signExtend(imm5);
+        r1 = r2 ^ signExtend(imm5, 5);
       } else {
         r1 = r2 ^ r3;
       }
