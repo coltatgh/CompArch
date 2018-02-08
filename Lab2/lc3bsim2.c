@@ -35,6 +35,7 @@
 
 void process_instruction();
 int16_t fetch_instruction();
+void execute(uint16_t instruction);
 
 /***************************************************************/
 /* A couple of useful definitions.                             */
@@ -435,14 +436,20 @@ int16_t fetch_instruction(){
 }
 
 void process_instruction(){
+  NEXT_LATCHES = CURRENT_LATCHES; /* keep before calling execute. might be unnecessary, but I'm being extra safe*/
+  incrementPC();
+  execute((uint16_t)fetch_instruction());
+
  /*  function: process_instruction
   *  
   *    Process one instruction at a time  
   *       -Fetch one instruction
   *       -Decode 
   *       -Execute
-  *       -Update NEXT_LATCHES
+  *       -Update NEXT_LATCHES  /*DONE
   */
+
+
 }
 
 /*
@@ -468,7 +475,7 @@ uint16_t readRegister(uint16_t registerNumber) {
 }
 
 void writeRegister(uint16_t registerNumber, uint16_t newValue) {
-  CURRENT_LATCHES.REGS[registerNumber] = newValue;
+  NEXT_LATCHES.REGS[registerNumber] = newValue;
 }
 
 int16_t signExtend(uint16_t signedNumber, uint16_t bitsOccupied) {
@@ -511,7 +518,7 @@ void writeByte(uint16_t address, uint16_t byte) {
 }
 
 void incrementPC(void) {
-  CURRENT_LATCHES.PC += 2;
+  NEXT_LATCHES.PC += 2;
 }
 
 /* likely need to handle doing operations with numbers that I SEXT, but that are cast as uint16_t*/
@@ -567,25 +574,27 @@ void execute(uint16_t instruction) {
             branch = true;
           }
         }
-        int16_t offset = signExtend(PCOffset9, 9);
-        CURRENT_LATCHES.PC += (offset +1);
+        if(branch){
+          int16_t offset = signExtend(PCOffset9, 9);
+          NEXT_LATCHES.PC = NEXT_LATCHES.PC (offset << 1); /*write with NEXT_LATCHES.PC b/c assignment is post-increment*/
+        }
       } else {
         /*NOP, do nothing*/
       }
     break;
     case JMP_RET: /*works for JMP & RET b/c in RET r2 is just R7*/
-      CURRENT_LATCHES.PC = r2;
+      NEXT_LATCHES.PC = r2;
     break;
     case JSR_R:
-      CURRENT_LATCHES.PC++;
-      writeRegister(7, CURRENT_LATCHES.PC);
+      incrementPC();
+      writeRegister(7, NEXT_LATCHES.PC);
       if(instruction & (1<<11)) {
         /*JSR*/
         PCOffset11 = signExtend(PCOffset11, 11);
-        CURRENT_LATCHES.PC += (PCOffset11 << 1);
+        NEXT_LATCHES.PC += (PCOffset11 << 1); /*write with NEXT_LATCHES.PC b/c assignment is post-increment*/
       } else {
         /*JSRR*/        
-        CURRENT_LATCHES.PC = r2;
+        NEXT_LATCHES.PC = r2;
       }
     break;
     case LDB:
@@ -599,7 +608,7 @@ void execute(uint16_t instruction) {
     break;
     case LEA:
       incrementPC();
-      r1 = CURRENT_LATCHES.PC + (signExtend(PCOffset9, 9) << 1); 
+      r1 = NEXT_LATCHES.PC + (signExtend(PCOffset9, 9) << 1); 
       writeRegister(dr, r1);
     break;
     case RTI:
@@ -629,9 +638,9 @@ void execute(uint16_t instruction) {
       writeWord(r2 + (signExtend(imm6,6) << 1), r1);
     break;
     case TRAP:
-      CURRENT_LATCHES.PC+=2;
-      writeRegister(7, CURRENT_LATCHES.PC);
-      CURRENT_LATCHES.PC = readWord(maskAndShiftDown(instruction, 0,7) << 1);
+      incrementPC();
+      writeRegister(7, NEXT_LATCHES.PC);
+      NEXT_LATCHES.PC = readWord(maskAndShiftDown(instruction, 0,7) << 1);
     break;
     case XOR_NOT:
       if(instruction & (1<<5)) {
