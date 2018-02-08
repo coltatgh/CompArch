@@ -586,7 +586,6 @@ void execute(uint16_t instruction) {
       NEXT_LATCHES.PC = r2;
     break;
     case JSR_R:
-      incrementPC();
       writeRegister(7, NEXT_LATCHES.PC);
       if(instruction & (1<<11)) {
         /*JSR*/
@@ -607,7 +606,6 @@ void execute(uint16_t instruction) {
       writeRegister(dr, r1);
     break;
     case LEA:
-      incrementPC();
       r1 = NEXT_LATCHES.PC + (signExtend(PCOffset9, 9) << 1); 
       writeRegister(dr, r1);
     break;
@@ -638,7 +636,6 @@ void execute(uint16_t instruction) {
       writeWord(r2 + (signExtend(imm6,6) << 1), r1);
     break;
     case TRAP:
-      incrementPC();
       writeRegister(7, NEXT_LATCHES.PC);
       NEXT_LATCHES.PC = readWord(maskAndShiftDown(instruction, 0,7) << 1);
     break;
