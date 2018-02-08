@@ -479,12 +479,18 @@ void writeRegister(uint16_t registerNumber, uint16_t newValue) {
 }
 
 int16_t signExtend(uint16_t signedNumber, uint16_t bitsOccupied) {
-  int16_t result = 0;
+  int16_t result = signedNumber;
   if(signedNumber & (1 << (bitsOccupied-1))) {
-    signedNumber = ~signedNumber;             
-    signedNumber += 1;
+    signedNumber = signedNumber - (1<<bitsOccupied);
+    int i = bitsOccupied;
+    for(i = bitsOccupied; i < 16; i++) {
+      result |= (1<<i);
+    }
+    if(result != (int16_t) signedNumber) {
+      printf("ERROR: SEXT ADDER DIDN'T WORK. ADDER = %d RAW SEXT = %d\n", signedNumber, result);
+    }
   }
-  return (int16_t) signedNumber;          /* Colton: compare this to piazza  //Karl: compare whole function to piazza or what?*/
+  return result;          /* Colton: compare this to piazza  //Karl: compare whole function to piazza or what?*/
 }
 
 uint16_t readWord(uint16_t address) {
