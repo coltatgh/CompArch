@@ -36,7 +36,7 @@
 void process_instruction();
 int16_t fetch_instruction();
 void execute(uint16_t instruction);
-
+uint16_t readWord(uint16_t address);
 /***************************************************************/
 /* A couple of useful definitions.                             */
 /***************************************************************/
@@ -432,7 +432,7 @@ int main(int argc, char *argv[]) {
 /***************************************************************/
 
 int16_t fetch_instruction(){
-  return read_word(CURRENT_LATCHES.PC);   /*Colton: any  internal checks necessary here?*/
+  return readWord(CURRENT_LATCHES.PC);   /*Colton: any  internal checks necessary here?*/
 }
 
 void process_instruction(){
@@ -594,7 +594,7 @@ void execute(uint16_t instruction) {
         }
         if(branch){
           int16_t offset = signExtend(PCOffset9, 9);
-          NEXT_LATCHES.PC = NEXT_LATCHES.PC (offset << 1); /*write with NEXT_LATCHES.PC b/c assignment is post-increment*/
+          NEXT_LATCHES.PC = NEXT_LATCHES.PC + (offset << 1); /*write with NEXT_LATCHES.PC b/c assignment is post-increment*/
         }
       } else {
         /*NOP, do nothing*/
