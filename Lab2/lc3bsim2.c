@@ -37,6 +37,8 @@ void process_instruction();
 int16_t fetch_instruction();
 void execute(uint16_t instruction);
 uint16_t readWord(uint16_t address);
+void incrementPC();
+
 /***************************************************************/
 /* A couple of useful definitions.                             */
 /***************************************************************/
