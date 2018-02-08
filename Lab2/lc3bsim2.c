@@ -4,7 +4,7 @@
    Name 1: Karl Solomon
    Name 2: Colton Lewis
    UTEID 1: Kws653
-   UTEID 2: UT EID of the second partner
+   UTEID 2: Ctl492
 */
 
 /***************************************************************/
@@ -34,6 +34,7 @@
 /***************************************************************/
 
 void process_instruction();
+int16_t fetch_instruction();
 
 /***************************************************************/
 /* A couple of useful definitions.                             */
@@ -429,6 +430,9 @@ int main(int argc, char *argv[]) {
 
 /***************************************************************/
 
+int16_t fetch_instruction(){
+  return read_word(CURRENT_LATCHES.PC);   /*Colton: any  internal checks necessary here?*/
+}
 
 void process_instruction(){
  /*  function: process_instruction
