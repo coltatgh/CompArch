@@ -521,6 +521,22 @@ void incrementPC(void) {
   NEXT_LATCHES.PC += 2;
 }
 
+void setConditionCodes(int16_t value) {
+  if(value > 0) {
+    NEXT_LATCHES.N = 0;
+    NEXT_LATCHES.Z = 0;
+    NEXT_LATCHES.P = 1;
+  } else if(value < 0) {
+    NEXT_LATCHES.N = 1;
+    NEXT_LATCHES.Z = 0;
+    NEXT_LATCHES.P = 0;
+  } else {
+    NEXT_LATCHES.N = 0;
+    NEXT_LATCHES.Z = 1;
+    NEXT_LATCHES.P = 0;
+  }
+}
+
 /* likely need to handle doing operations with numbers that I SEXT, but that are cast as uint16_t*/
 void execute(uint16_t instruction) {
   uint8_t opcode = (instruction & OPCODE_MASK) >> 12;
@@ -540,11 +556,12 @@ void execute(uint16_t instruction) {
   switch(opcode) {
     case ADD:
       if(bit5Mask) {
-        result = r2 + signExtend(imm5, 5);  /*Karl: do we need to typecase r2 to int16_t for the add to work right or nah? */
+        result = (int16_t) r2 + signExtend(imm5, 5);  /*Karl: do we need to typecase r2 to int16_t for the add to work right or nah? */
       } else {
-        result = r2 + r3;
+        result = (int16_t) r2 + (int16_t) r3;
       }
-      writeRegister(dr, result);
+      writeRegister(dr, (int16_t) result);
+      setConditionCodes((int16_t) result);
     break;
     case AND:
       if(bit5Mask) {
@@ -553,6 +570,7 @@ void execute(uint16_t instruction) {
         result = r2 & r3;
       }
       writeRegister(dr, result);
+      setConditionCodes((int16_t) result);
     break;
     case BR_NOP:
       /*r1 contains nzp bits*/
@@ -600,14 +618,17 @@ void execute(uint16_t instruction) {
     /*8-bit contents of memory at this address are sign-extended and stored into DR*/
       r1 = signExtend(readByte(r2 + signExtend(imm6, 6)),8);
       writeRegister(dr, r1);
+      setConditionCodes((int16_t) dr);
     break;
     case LDW:
       r1 = readWord(r2 + (signExtend(imm6, 6) << 1));
-      writeRegister(dr, r1);
+      writeRegister(dr, r1);      
+      setConditionCodes((int16_t) dr);
     break;
     case LEA:
       r1 = NEXT_LATCHES.PC + (signExtend(PCOffset9, 9) << 1); 
       writeRegister(dr, r1);
+      setConditionCodes((int16_t) dr);
     break;
     case RTI:
     /*You do not have to implement the RTI instruction for this lab. You can assume that the
@@ -628,6 +649,7 @@ void execute(uint16_t instruction) {
       }
       r1 = r2;
       writeRegister(dr, r1);
+      setConditionCodes((int16_t) dr);
     break;
     case STB:
       writeByte(r2 + signExtend(imm6, 6), r1);
@@ -645,7 +667,8 @@ void execute(uint16_t instruction) {
       } else {
         r1 = r2 ^ r3;
       }
-      writeRegister(dr, r1);
+      writeRegister(dr, r1);      
+      setConditionCodes((int16_t) dr);
     break;
     default:
     break;
