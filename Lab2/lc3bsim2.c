@@ -567,8 +567,11 @@ void execute(uint16_t instruction) {
             branch = true;
           }
         }
-        int16_t offset = signExtend(PCOffset9, 9);
-        incrementPC();
+        if(branch){
+          int16_t offset = signExtend(PCOffset9, 9);
+          incrementPC();
+          NEXT_LATCHES.PC = NEXT_LATCHES.PC + (offset << 1); /*write with NEXT_LATCHES.PC b/c assignment is post-increment*/
+        }
       } else {
         /*NOP, do nothing*/
       }
@@ -578,11 +581,11 @@ void execute(uint16_t instruction) {
     break;
     case JSR_R:
       incrementPC();
-      writeRegister(7, CURRENT_LATCHES.PC);
+      writeRegister(7, NEXT_LATCHES.PC);
       if(instruction & (1<<11)) {
         /*JSR*/
         PCOffset11 = signExtend(PCOffset11, 11);
-        NEXT_LATCHES.PC += (PCOffset11 << 1);
+        NEXT_LATCHES.PC += (PCOffset11 << 1); /*write with NEXT_LATCHES.PC b/c assignment is post-increment*/
       } else {
         /*JSRR*/        
         NEXT_LATCHES.PC = r2;
@@ -599,7 +602,7 @@ void execute(uint16_t instruction) {
     break;
     case LEA:
       incrementPC();
-      r1 = CURRENT_LATCHES.PC + (signExtend(PCOffset9, 9) << 1); 
+      r1 = NEXT_LATCHES.PC + (signExtend(PCOffset9, 9) << 1); 
       writeRegister(dr, r1);
     break;
     case RTI:
@@ -630,7 +633,7 @@ void execute(uint16_t instruction) {
     break;
     case TRAP:
       incrementPC();
-      writeRegister(7, CURRENT_LATCHES.PC);
+      writeRegister(7, NEXT_LATCHES.PC);
       NEXT_LATCHES.PC = readWord(maskAndShiftDown(instruction, 0,7) << 1);
     break;
     case XOR_NOT:
