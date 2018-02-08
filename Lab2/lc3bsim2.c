@@ -4,7 +4,7 @@
    Name 1: Karl Solomon
    Name 2: Colton Lewis
    UTEID 1: Kws653
-   UTEID 2: UT EID of the second partner
+   UTEID 2: Ctl492
 */
 
 /***************************************************************/
@@ -34,6 +34,7 @@
 /***************************************************************/
 
 void process_instruction();
+int16_t fetch_instruction();
 void execute(uint16_t instruction);
 
 /***************************************************************/
@@ -430,9 +431,15 @@ int main(int argc, char *argv[]) {
 
 /***************************************************************/
 
+int16_t fetch_instruction(){
+  return read_word(CURRENT_LATCHES.PC);   /*Colton: any  internal checks necessary here?*/
+}
 
 void process_instruction(){
   NEXT_LATCHES = CURRENT_LATCHES; /* keep before calling execute. might be unnecessary, but I'm being extra safe*/
+  incrementPC();
+  execute((uint16_t)fetch_instruction());
+
  /*  function: process_instruction
   *  
   *    Process one instruction at a time  
@@ -587,8 +594,7 @@ void execute(uint16_t instruction) {
         }
         if(branch){
           int16_t offset = signExtend(PCOffset9, 9);
-          incrementPC();
-          NEXT_LATCHES.PC = NEXT_LATCHES.PC + (offset << 1); /*write with NEXT_LATCHES.PC b/c assignment is post-increment*/
+          NEXT_LATCHES.PC = NEXT_LATCHES.PC (offset << 1); /*write with NEXT_LATCHES.PC b/c assignment is post-increment*/
         }
       } else {
         /*NOP, do nothing*/
