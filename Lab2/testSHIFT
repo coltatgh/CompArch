@@ -1,0 +1,16 @@
+		.ORIG x3000 ; Start Address is x3000
+		LEA R0, VALS
+		LDW R1, R0, #0
+		LDW R2, R0, #1
+		LDW R3, R0, #2
+		LDW R4, R0, #3
+		LSHF R5, R1, #5;   = 32
+		RSHFL R6, R2, #7;  = 511 (I think)
+		RSHFA R7, R2, #7;  = -1 still
+		RSHFL R6, R3, #5;  = 1920
+		RSHFA R7, R3, #5;  = 0xFF80
+		HALT
+
+VALS 	.FILL 1      ; R1
+		.FILL -1     ; R2
+		.FILL 0xF000 ; R3
