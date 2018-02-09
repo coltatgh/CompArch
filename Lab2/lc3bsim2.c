@@ -398,8 +398,9 @@ void initialize(char *program_filename, int num_prog_files) {
 /* Procedure : main                                            */
 /*                                                             */
 /***************************************************************/
+ FILE * dumpsim_file; //TODO: MOVE BACK
 int main(int argc, char *argv[]) {                              
- FILE * dumpsim_file;
+ //FILE * dumpsim_file;
 
  /* Error Checking */
  if (argc < 2) {
@@ -520,7 +521,7 @@ uint16_t readByte(uint16_t address) {
 }
 
 void writeWord(uint16_t address, uint16_t word) {
-  MEMORY[address/2][1] = High8bits(word);
+  MEMORY[address/2][1] = High8bits(word) >> 8;
   MEMORY[address/2][0] = Low8bits(word);
 }
 
@@ -640,10 +641,9 @@ void execute(uint16_t instruction) {
       writeRegister(dr, r1);      
       setConditionCodes((int16_t) r1);
     break;
-    case LEA:
+    case LEA: /*DOES NOT SET CONDITION CODES, DESPITE ISA DOCUMENT*/
       r1 = NEXT_LATCHES.PC + (signExtend(PCOffset9, 9) << 1); 
       writeRegister(dr, r1);
-      setConditionCodes((int16_t) r1);
     break;
     case RTI:
     /*You do not have to implement the RTI instruction for this lab. You can assume that the
@@ -667,10 +667,14 @@ void execute(uint16_t instruction) {
       setConditionCodes((int16_t) r1);
     break;
     case STB:
+      mdump(dumpsim_file,r2 + signExtend(imm6, 6) - 2, r2 + signExtend(imm6, 6) + 2);
       writeByte(r2 + signExtend(imm6, 6), r1);
+      mdump(dumpsim_file,r2 + signExtend(imm6, 6) - 2, r2 + signExtend(imm6, 6) + 2);
     break;
     case STW:
+      mdump(dumpsim_file,r2 + signExtend(imm6, 6) - 2, r2 + signExtend(imm6, 6) + 2);
       writeWord(r2 + (signExtend(imm6,6) << 1), r1);
+      mdump(dumpsim_file,r2 + signExtend(imm6, 6) - 2, r2 + signExtend(imm6, 6) + 2);
     break;
     case TRAP:
       writeRegister(7, NEXT_LATCHES.PC);
