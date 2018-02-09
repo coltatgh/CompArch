@@ -2,22 +2,21 @@
 		JSR BLK1;
 
 
-VALS 	.FILL 0x1100 
-		.FILL 0x5544    
-		.FILL 0x3322 
+VALS 	.FILL x1100 
+		.FILL x5544    
+		.FILL x3322 
 
-LOC		.FILL 0x3500
-		.FILL 0x3502
-		.FILL 0x3504
+LOC		.FILL x3500
+		.FILL x3502
+		.FILL x3504
 
 BLK1	LEA R0, VALS;
 		LDW R1, R0, #0;
 		LEA R2, LOC;
 		LDW R3, R2, #0;
 		STW R1, R3, #0;
-
 		;Work in progress
-
+		.END
 
 
 

@@ -12,11 +12,12 @@
 		XOR R6, R6, R1;   = 0x5A5A
 		XOR R6, R6, #0;   = 0x5A5A
 		XOR R7, R3, R4;   = 0x9999
-		XOR R7, R7, 0x1F; = 0x9986
-		NOT R7, R7;       = 0x6679
+		XOR R7, R7, x0F; = 
+		NOT R7, R7;       = 
 		HALT
 
-VALS 	.FILL 0xA5A5 ; R1
-		.FILL 0x5A5A ; R2
-		.FILL 0xFFFF ; R3
-		.FILL 0x6666 ; R4
+VALS 	.FILL xA5A5 ; R1
+		.FILL x5A5A ; R2
+		.FILL xFFFF ; R3
+		.FILL x6666 ; R4
+		.END

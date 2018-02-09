@@ -11,6 +11,7 @@
 		RSHFA R7, R3, #5;  = 0xFF80
 		HALT
 
-VALS 	.FILL 1      ; R1
-		.FILL -1     ; R2
-		.FILL 0xF000 ; R3
+VALS 	.FILL #1      ; R1
+		.FILL #-1     ; R2
+		.FILL xF000 ; R3
+		.END

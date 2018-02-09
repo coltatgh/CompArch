@@ -3,15 +3,14 @@
 		LDW R1, R0, #0
 		LDW R2, R0, #1
 		ADD R3, R1, R2
-		ADD R3, R1, 0x-5
+		ADD R3, R1, x-5
 		LDW R4, R0, #2
-		LDW R5, R0, 0x3
+		LDW R5, R0, x3
 		ADD R4, R4, R5
 		HALT
 		
-VALS 	.FILL 10 	; R1
-		.FILL -10 	; R2
-		.FILL 16 	; R4
-		.FILL -32 	; R5
-		;PUT VALUES TO TEST OVERFLOW
+VALS 	.FILL #10 	; R1
+		.FILL #-10 	; R2
+		.FILL #16 	; R4
+		.FILL #-32 	; R5 PUT VALUES TO TEST OVERFLOW
 		.END
