@@ -582,7 +582,7 @@ void execute(uint16_t instruction) {
     break;
     case BR_NOP:
       /*r1 contains nzp bits*/
-      if(r1) {
+      if(dr) {
         /*BR*/
         bool branch = false;
         if(instruction & Nbit) {
@@ -626,17 +626,17 @@ void execute(uint16_t instruction) {
     /*8-bit contents of memory at this address are sign-extended and stored into DR*/
       r1 = signExtend(readByte(r2 + signExtend(imm6, 6)),8);
       writeRegister(dr, r1);
-      setConditionCodes((int16_t) dr);
+      setConditionCodes((int16_t) r1);
     break;
     case LDW:
       r1 = readWord(r2 + (signExtend(imm6, 6) << 1));
       writeRegister(dr, r1);      
-      setConditionCodes((int16_t) dr);
+      setConditionCodes((int16_t) r1);
     break;
     case LEA:
       r1 = NEXT_LATCHES.PC + (signExtend(PCOffset9, 9) << 1); 
       writeRegister(dr, r1);
-      setConditionCodes((int16_t) dr);
+      setConditionCodes((int16_t) r1);
     break;
     case RTI:
     /*You do not have to implement the RTI instruction for this lab. You can assume that the
@@ -657,7 +657,7 @@ void execute(uint16_t instruction) {
       }
       r1 = r2;
       writeRegister(dr, r1);
-      setConditionCodes((int16_t) dr);
+      setConditionCodes((int16_t) r1);
     break;
     case STB:
       writeByte(r2 + signExtend(imm6, 6), r1);
@@ -676,7 +676,7 @@ void execute(uint16_t instruction) {
         r1 = r2 ^ r3;
       }
       writeRegister(dr, r1);      
-      setConditionCodes((int16_t) dr);
+      setConditionCodes((int16_t) r1);
     break;
     default:
     break;

@@ -481,7 +481,7 @@ void main_2ndPass(void) {
           case FILL:
             result = toLiteral(a, 17, SIGNED);  /*FIXME: ".FILL can take a signed number or an unsigned number"*/
             if(result > (1<<15)) {
-              result = (1<<16 - result);
+              result = (result - ((1<<16)-1))-1;
             }
             break;
           case END:
