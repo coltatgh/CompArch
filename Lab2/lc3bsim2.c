@@ -127,7 +127,7 @@ void help() {
  printf("run n            -  execute program for n instructions\n");
  printf("mdump low high   -  dump memory from low to high      \n");
  printf("rdump            -  dump the register & bus values    \n");
- printf("setM addr value  -  set the memory at addr w/ value   \n");
+ /*printf("setM addr value  -  set the memory at addr w/ value   \n");*/
  printf("?                -  display this help menu            \n");
  printf("quit             -  exit the program                  \n\n");
 }
@@ -296,13 +296,13 @@ void get_command(FILE * dumpsim_file) {
             run(cycles);
    }
    break;
- case 'S':
+ /*case 'S':
  case 's':
     scanf("%i %i", &start, &stop);
     MEMORY[start >> 1][0] = (int) Low8bits(stop);
     MEMORY[start >> 1][1] = (int) (High8bits(stop) >> 8);
     mdump(dumpsim_file, start-2, start+2);
-    break;
+    break;*/
  default:
    printf("Invalid Command\n");
    break;
@@ -398,9 +398,8 @@ void initialize(char *program_filename, int num_prog_files) {
 /* Procedure : main                                            */
 /*                                                             */
 /***************************************************************/
- FILE * dumpsim_file; //TODO: MOVE BACK
 int main(int argc, char *argv[]) {                              
- //FILE * dumpsim_file;
+ FILE * dumpsim_file;
 
  /* Error Checking */
  if (argc < 2) {
@@ -500,7 +499,7 @@ int16_t signExtend(uint16_t signedNumber, uint16_t bitsOccupied) {
       printf("ERROR: SEXT ADDER DIDN'T WORK. ADDER = %d RAW SEXT = %d\n", signedNumber, result);
     }
   }
-  return result;          /* Colton: compare this to piazza  //Karl: compare whole function to piazza or what?*/
+  return result;          
 }
 
 uint16_t readWord(uint16_t address) {
@@ -667,14 +666,10 @@ void execute(uint16_t instruction) {
       setConditionCodes((int16_t) r1);
     break;
     case STB:
-      mdump(dumpsim_file,r2 + signExtend(imm6, 6) - 2, r2 + signExtend(imm6, 6) + 2);
       writeByte(r2 + signExtend(imm6, 6), r1);
-      mdump(dumpsim_file,r2 + signExtend(imm6, 6) - 2, r2 + signExtend(imm6, 6) + 2);
     break;
     case STW:
-      mdump(dumpsim_file,r2 + signExtend(imm6, 6) - 2, r2 + signExtend(imm6, 6) + 2);
       writeWord(r2 + (signExtend(imm6,6) << 1), r1);
-      mdump(dumpsim_file,r2 + signExtend(imm6, 6) - 2, r2 + signExtend(imm6, 6) + 2);
     break;
     case TRAP:
       writeRegister(7, NEXT_LATCHES.PC);
