@@ -127,6 +127,7 @@ void help() {
  printf("run n            -  execute program for n instructions\n");
  printf("mdump low high   -  dump memory from low to high      \n");
  printf("rdump            -  dump the register & bus values    \n");
+ printf("setM addr value  -  set the memory at addr w/ value   \n");
  printf("?                -  display this help menu            \n");
  printf("quit             -  exit the program                  \n\n");
 }
@@ -295,7 +296,13 @@ void get_command(FILE * dumpsim_file) {
             run(cycles);
    }
    break;
-
+ case 'S':
+ case 's':
+    scanf("%i %i", &start, &stop);
+    MEMORY[start >> 1][0] = (int) Low8bits(stop);
+    MEMORY[start >> 1][1] = (int) (High8bits(stop) >> 8);
+    mdump(dumpsim_file, start-2, start+2);
+    break;
  default:
    printf("Invalid Command\n");
    break;

@@ -1,0 +1,45 @@
+LET CONTROL BITS = 0x1B (should reverse order)
+		LEA R0, DST0	; R0 = 0x3048 
+		LDW R0, R0, #0	; R0 = 0x4005
+		AND R1, R1, #0	; R1 = 0x0000
+		LEA R2, CTRL	; R2 = 0x3046
+		LDW R2, R2, #0	; R2 = 0x4004
+		LDB R2, R2, #0	; R2 = 0x001B
+
+LOOP	AND R3, R2, #3	; R3 = 0x0003
+		ADD R3, R3, #-1 ; R3 = 0x0002
+		BRn ZERO		
+		BRz ONE
+		ADD R3, R3, #-2 ; R3 = 0x0000
+		BRn TWO
+		BRz THREE		; Branches 0x3018 --> 0x3026
+
+ZERO	LEA R4, SRC0	; R4 = 0x303e
+		BR SHFL			; Jumps 0x301c to 0x302a
+ONE		LEA R4, SRC1	
+		BR SHFL
+TWO		LEA R4, SRC2	
+		BR SHFL
+THREE	LEA R4, SRC3	; R4 = 0x3044	
+		BR SHFL			; Jumps 0x3028 -> 0x302A (trivial)
+
+SHFL	LDW R4, R4, #0	; R4 = 0x4003
+		LDB R5, R4, #0	; R5 = 0xffcc (34)  ????
+		STB R5, R0, #0	; 0x4005 contains 0xCC, 0x4006 contains 0xDD, 0x4007 contains 0xAA, 0x4008 contains 0xBB
+		ADD R6, R1, #-3	; R6 = 0xfffd (-2)
+		BRzp DONE		
+		RSHFL R2, R2, #2; R2 = 0x0006	
+		ADD R0, R0, #1	; R0 = 0x4006	
+		ADD R1, R1, #1	; R1 = 0x0001	
+		BR LOOP			; Jumps 0x303a -> 0x300c
+DONE  	TRAP x25		
+SRC0	.FILL	x4000
+SRC1	.FILL	x4001
+SRC2	.FILL	x4002
+SRC3	.FILL	x4003
+CTRL	.FILL	x4004
+DST0	.FILL	x4005
+DST1	.FILL	x4006
+DST2	.FILL	x4007
+DST3	.FILL	x4008
+		.END
