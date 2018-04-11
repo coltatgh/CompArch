@@ -52,7 +52,7 @@ void latch_datapath_values();
 /***************************************************************/
 enum CS_BITS {                                                  
     IRD,
-    COND1, COND0,
+    COND2, COND1, COND0,
     J5, J4, J3, J2, J1, J0,
     LD_MAR,
     LD_MDR,
@@ -61,14 +61,21 @@ enum CS_BITS {
     LD_REG,
     LD_CC,
     LD_PC,
+    LD_SSR,
+    TOGL_PSR,
+    LD_PSR,
     GATE_PC,
     GATE_MDR,
     GATE_ALU,
     GATE_MARMUX,
     GATE_SHF,
+    GATE_SSR,
+    GATE_PSR,
+    GATE_VECTOR,
     PCMUX1, PCMUX0,
     DRMUX,
     SR1MUX,
+    SSR_MUX,
     ADDR1MUX,
     ADDR2MUX1, ADDR2MUX0,
     MARMUX,
@@ -77,7 +84,6 @@ enum CS_BITS {
     R_W,
     DATA_SIZE,
     LSHF1,
-/* MODIFY: you have to add all your new control signals */
     CONTROL_STORE_BITS
 } CS_BITS;
 
@@ -85,7 +91,7 @@ enum CS_BITS {
 /* Functions to get at the control bits.                       */
 /***************************************************************/
 int GetIRD(int *x)           { return(x[IRD]); }
-int GetCOND(int *x)          { return((x[COND1] << 1) + x[COND0]); }
+int GetCOND(int *x)          { return((x[COND2] << 2) + (x[COND1] << 1) + x[COND0]); }  //Colt
 int GetJ(int *x)             { return((x[J5] << 5) + (x[J4] << 4) +
                       (x[J3] << 3) + (x[J2] << 2) +
                       (x[J1] << 1) + x[J0]); }
@@ -96,6 +102,11 @@ int GetLD_BEN(int *x)        { return(x[LD_BEN]); }
 int GetLD_REG(int *x)        { return(x[LD_REG]); }
 int GetLD_CC(int *x)         { return(x[LD_CC]); }
 int GetLD_PC(int *x)         { return(x[LD_PC]); }
+
+int GetLD_SSR(int *x)        { return(x[LD_SSR]);}      //Colt
+int GetTOGL_PSR(int *x)      { return(x[TOGL_PSR]);}    //Colt
+int GetLD_PSR(int *x)        { return(x[LD_PSR]);}      //Colt
+
 int GetGATE_PC(int *x)       { return(x[GATE_PC]); }
 int GetGATE_MDR(int *x)      { return(x[GATE_MDR]); }
 int GetGATE_ALU(int *x)      { return(x[GATE_ALU]); }
