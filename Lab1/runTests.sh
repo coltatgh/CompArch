@@ -8,8 +8,10 @@ for i in *.asm; do
 	a=$(printf '%s.asm %s.obj\n' "${i:0:-4}" "${i:0:-4}")
 	echo $a
 	./assembler $a
+	b=$(printf '%s.obj' "${i:0:-4}")
+	c=$(printf '../Lab4/%s' "${b}")
+	mv $b $c
 done
-
 
 #release
  # compile=$(printf ' -ansi assembler.c')
