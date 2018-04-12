@@ -75,10 +75,10 @@ enum CS_BITS {
     PCMUX1, PCMUX0,
     DRMUX1, DRMUX0,
     SR1MUX1, SR1MUX0,
-    SSRMUX,
-    ADDR1MUX,
+    ADDR1MUX,               //35
     ADDR2MUX1, ADDR2MUX0,
     MARMUX,
+    SSRMUX,
     ALUK1, ALUK0,
     MIO_EN,
     R_W,
@@ -148,7 +148,7 @@ int CONTROL_STORE[CONTROL_STORE_ROWS][CONTROL_STORE_BITS];
 
 #define WORDS_IN_MEM    0x08000 
 #define MEM_CYCLES      5
-#define VECTOR_TABLE    0x200;
+#define VECTOR_TABLE    0x200
 int MEMORY[WORDS_IN_MEM][2];
 
 /***************************************************************/
@@ -551,6 +551,8 @@ void initialize(char *ucode_filename, char *program_filename, int num_prog_files
 
     //Colton: AM I MISSING ANY VALUES???
     CURRENT_LATCHES.PSR = 0x8002;   //Consider just changing to a single bit
+    CURRENT_LATCHES.EXCV = 0;
+    CURRENT_LATCHES.INTV = 0;
 
     NEXT_LATCHES = CURRENT_LATCHES;
 
@@ -679,7 +681,7 @@ void writeByte(uint16_t address, uint16_t byte) {
 /*Returns 1 if user mode and 0 if system*/
 int getPSRMode() {
     int mode;
-    if((CURRENT_LATCHES.PSR & 0x80) == 0)
+    if((CURRENT_LATCHES.PSR & 0x8000) == 0)
         mode = 0;
     else
         mode = 1;
@@ -689,7 +691,7 @@ int getPSRMode() {
 
 int checkForExceptions() {
 
-    int vector;
+    int vector = 0;
     bool isTrap = getOpcode() == 15;
     bool inVecTable = (NEXT_LATCHES.MAR < 0x0200);
     bool isOOB = (NEXT_LATCHES.MAR < 0x3000);
@@ -741,10 +743,6 @@ void eval_micro_sequencer() {
    /* If state 32, use the opcode to get next state */
    if(microIRD)
         nextState = getOpcode();
-
-    else if(CURRENT_LATCHES.EXCV) {  // Colton: Need to check for system vs user mode?
-        nextState = 34;
-    }
 
     else {
         int microCond = GetCOND(micro);
@@ -1001,15 +999,19 @@ void eval_bus_drivers() {
 
     /* Value will hold address from the vector table */
     if(CURRENT_LATCHES.EXCV != 0){
-        VECTOR_IN = VECTOR_TABLE + (2*CURRENT_LATCHES.EXCV);
+        VECTOR_IN = VECTOR_TABLE + (2*CURRENT_LATCHES.EXCV);           
+    }
+    else if(CURRENT_LATCHES.INTV != 0){
+        VECTOR_IN = VECTOR_TABLE + (2*CURRENT_LATCHES.INTV);
     }
     else{
-        VECTOR_IN = VECTOR_TABLE + (2*CURRENT_LATCHES.INTV);
+        VECTOR_IN = VECTOR_TABLE;
     }
 
 }
 
 int BUS;
+bool jumped34 = false;
 void drive_bus() {
 
   /* 
@@ -1049,7 +1051,19 @@ void drive_bus() {
     }
     if(GetGATE_VECTOR(micro)){
         BUS = Low16bits(VECTOR_IN);
+        printf("Gating vector address of %d\n", VECTOR_IN);
         DRIVER_COUNT++;
+
+        if(CURRENT_LATCHES.EXCV != 0){
+            NEXT_LATCHES.EXCV == 0;
+            jumped34 = false;
+        }
+        else if(CURRENT_LATCHES.INTV != 0){
+            NEXT_LATCHES.INTV = 0;
+        }
+        else{
+            printf("How the hell did we get here with no vec set???");
+        }
     }
 
 
@@ -1180,20 +1194,13 @@ void latch_datapath_values() {
 
     }
 
-    //Info Exchanged between reg files? Ready to clear vectors?
+    //Info Exchanged between reg files?
     if(GetTOGL_PSR(micro)){
         if(backingRegsUp){
             int i;
             for(i=0; i < LC_3b_REGS; i++)
                 NEXT_LATCHES.BACKUP_REGS[i] = CURRENT_LATCHES.REGS[i];
             backingRegsUp = false;
-
-            if(CURRENT_LATCHES.EXCV != 0)
-                NEXT_LATCHES.EXCV = 0;
-            else if(CURRENT_LATCHES.INTV != 0)
-                NEXT_LATCHES.INTV = 0;
-            else
-                printf("How did we get here without a vector?\n");
         }
         else {
             int i;
@@ -1213,7 +1220,14 @@ void latch_datapath_values() {
 
     //check for exceptions
     int eVector = checkForExceptions();
-    if(eVector > 1)
+    int nextState;
+    if((eVector > 1) && (!jumped34)) {
         NEXT_LATCHES.EXCV = eVector;
+        nextState = 34;
+        jumped34 = true;
+        memcpy(NEXT_LATCHES.MICROINSTRUCTION, CONTROL_STORE[nextState], sizeof(int)*CONTROL_STORE_BITS);
+        NEXT_LATCHES.STATE_NUMBER = nextState;
+        printf("JK, Now Next state is %d\n", nextState); 
+    }
 }
 
