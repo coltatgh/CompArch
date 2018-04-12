@@ -691,7 +691,8 @@ int checkForExceptions() {
 
     int vector;
     bool isTrap = getOpcode() == 15;
-    bool isOOB = ((NEXT_LATCHES.MAR > 0x200) && (NEXT_LATCHES.MAR < 0x3000));
+    bool inVecTable = (NEXT_LATCHES.MAR < 0x0200);
+    bool isOOB = (NEXT_LATCHES.MAR < 0x3000);
     bool isUserMode = (getPSRMode() == 1);
     bool isWordAccess = ( (CURRENT_LATCHES.STATE_NUMBER == 6) || (CURRENT_LATCHES.STATE_NUMBER == 7) );
     bool isOddAddress = ( NEXT_LATCHES.MAR % 2 == 1);
@@ -699,7 +700,7 @@ int checkForExceptions() {
     bool isInvalidOpcode = ( (nextOpcode == 10) || (nextOpcode == 11) );
 
     //check for protection exception:
-    if(!isTrap && isOOB && isUserMode)
+    if( !(isTrap && inVecTable) && isOOB && isUserMode )
         vector = 0x02;
 
     //check for unaligned:
@@ -791,7 +792,7 @@ void eval_micro_sequencer() {
     /* Latch the next Microinstruction*/
     memcpy(NEXT_LATCHES.MICROINSTRUCTION, CONTROL_STORE[nextState], sizeof(int)*CONTROL_STORE_BITS);
     NEXT_LATCHES.STATE_NUMBER = nextState;
-    printf("Next state is %d\n", nextState); 
+    printf("Current state is %d, and Next state is %d\n", CURRENT_LATCHES.STATE_NUMBER, nextState); 
 }
 
 
@@ -1000,10 +1001,10 @@ void eval_bus_drivers() {
 
     /* Value will hold address from the vector table */
     if(CURRENT_LATCHES.EXCV != 0){
-        VECTOR_IN = VECTOR_TABLE + CURRENT_LATCHES.EXCV;
+        VECTOR_IN = VECTOR_TABLE + (2*CURRENT_LATCHES.EXCV);
     }
     else{
-        VECTOR_IN = VECTOR_TABLE + CURRENT_LATCHES.INTV;
+        VECTOR_IN = VECTOR_TABLE + (2*CURRENT_LATCHES.INTV);
     }
 
 }
