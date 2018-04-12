@@ -73,9 +73,9 @@ enum CS_BITS {
     GATE_PSR,
     GATE_VECTOR,
     PCMUX1, PCMUX0,
-    DRMUX,
-    SR1MUX,
-    SSR_MUX,
+    DRMUX1, DRMUX0,
+    SR1MUX1, SR1MUX0,
+    SSRMUX,
     ADDR1MUX,
     ADDR2MUX1, ADDR2MUX0,
     MARMUX,
@@ -112,18 +112,25 @@ int GetGATE_MDR(int *x)      { return(x[GATE_MDR]); }
 int GetGATE_ALU(int *x)      { return(x[GATE_ALU]); }
 int GetGATE_MARMUX(int *x)   { return(x[GATE_MARMUX]); }
 int GetGATE_SHF(int *x)      { return(x[GATE_SHF]); }
+
+int GetGATE_SSR(int *x)      { return(x[GATE_SSR]);}            //Colt
+int GetGATE_PSR(int *x)      { return(x[GATE_PSR]);}            //Colt
+int GetGATE_VECTOR(int *x)   { return(x[GATE_VECTOR]);}         //Colt
+
 int GetPCMUX(int *x)         { return((x[PCMUX1] << 1) + x[PCMUX0]); }
-int GetDRMUX(int *x)         { return(x[DRMUX]); }
-int GetSR1MUX(int *x)        { return(x[SR1MUX]); }
+int GetDRMUX(int *x)         { return((x[DRMUX1] << 1) + x[DRMUX0]); }
+int GetSR1MUX(int *x)        { return((x[SR1MUX1] << 1) + x[SR1MUX0]); }
 int GetADDR1MUX(int *x)      { return(x[ADDR1MUX]); }
 int GetADDR2MUX(int *x)      { return((x[ADDR2MUX1] << 1) + x[ADDR2MUX0]); }
 int GetMARMUX(int *x)        { return(x[MARMUX]); }
+
+int GetSSRMUX(int *x)        { return(x[SSRMUX]);}              //Colt
+
 int GetALUK(int *x)          { return((x[ALUK1] << 1) + x[ALUK0]); }
 int GetMIO_EN(int *x)        { return(x[MIO_EN]); }
 int GetR_W(int *x)           { return(x[R_W]); }
 int GetDATA_SIZE(int *x)     { return(x[DATA_SIZE]); } 
 int GetLSHF1(int *x)         { return(x[LSHF1]); }
-/* MODIFY: you can add more Get functions for your new control signals */
 
 /***************************************************************/
 /* The control store rom.                                      */
@@ -180,7 +187,7 @@ int STATE_NUMBER; /* Current State Number - Provided for debugging */
 int INTV; /* Interrupt vector register */
 int EXCV; /* Exception vector register */
 int SSP; /* Initial value of system stack pointer */
-/* MODIFY: You may add system latches that are required by your implementation */
+int PSR;
 
 } System_Latches;
 
@@ -601,11 +608,15 @@ int getOpcode(){
 
 int getSR1(int *micro){
     int sr1;
-    if(!GetSR1MUX(micro))
+    if(GetSR1MUX(micro) == 0)
         sr1 = (CURRENT_LATCHES.IR & 0x0E00) >> 9;
-    else{
+    else if(GetSR1MUX(micro) == 1){
         sr1 = (CURRENT_LATCHES.IR & 0x01C0) >> 6;
     }
+    else if(GetSR1MUX(micro) == 2){
+        sr1 = 6;
+    }
+
     sr1 = sr1 & 0x07;   /* precaution for weird sext */
     return sr1;
 }
@@ -658,6 +669,16 @@ void writeByte(uint16_t address, uint16_t byte) {
     MEMORY[address/2][0] = Low8bits(byte);
 }
 
+/*Returns 1 if user mode and 0 if system*/
+void getPSRMode() {
+    int mode;
+    if((CURRENT_LATCHES.PSR & 0x80) == 0)
+        mode = 0;
+    else
+        mode = 1;
+    return mode;
+}
+
 int *micro;
 void eval_micro_sequencer() {
   /* 
@@ -672,8 +693,14 @@ void eval_micro_sequencer() {
    /* If state 32, use the opcode to get next state */
    if(microIRD)
         nextState = getOpcode();
-    else{
+
+    else if(CURRENT_LATCHES.EXCV) {  // Colton: Need to check for system vs user mode?
+        nextState = 34;
+    }
+
+    else {
         int microCond = GetCOND(micro);
+
         switch(microCond){
             /* J bits represent the next state */
             case 0:
@@ -702,6 +729,14 @@ void eval_micro_sequencer() {
                     nextState = 20;
                 else
                     nextState = 21;
+                break;
+
+            /* Addressing Mode */
+            case 4:
+                if((CURRENT_LATCHES.INTV == 1) && (getPSRMode() == 1)
+                    nextState = microJ + 32;
+                else
+                    nextState = microJ;
                 break;
         }
     }
