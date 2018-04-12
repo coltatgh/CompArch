@@ -549,11 +549,13 @@ void initialize(char *ucode_filename, char *program_filename, int num_prog_files
     memcpy(CURRENT_LATCHES.MICROINSTRUCTION, CONTROL_STORE[INITIAL_STATE_NUMBER], sizeof(int)*CONTROL_STORE_BITS);
     CURRENT_LATCHES.SSP = 0x3000; /* Initial value of system stack pointer */
 
+    //Colton: AM I MISSING ANY VALUES???
+    CURRENT_LATCHES.PSR = 0x8002;   //Consider just changing to a single bit
+
     NEXT_LATCHES = CURRENT_LATCHES;
 
     RUN_BIT = TRUE;
 
-    //Colton: AM I MISSING ANY VALUES???
 }
 
 /***************************************************************/
@@ -1162,13 +1164,20 @@ void latch_datapath_values() {
 
     }
 
-    //Info Exchanged between reg files?
+    //Info Exchanged between reg files? Ready to clear vectors?
     if(GetTOGL_PSR(micro)){
         if(backingRegsUp){
             int i;
             for(i=0; i < LC_3b_REGS; i++)
                 NEXT_LATCHES.BACKUP_REGS[i] = CURRENT_LATCHES.REGS[i];
             backingRegsUp = false;
+
+            if(CURRENT_LATCHES.EXCV != 0)
+                NEXT_LATCHES.EXCV = 0;
+            else if(CURRENT_LATCHES.INTV != 0)
+                NEXT_LATCHES.INTV = 0;
+            else
+                printf("How did we get here without a vector?\n")
         }
         else {
             int i;
@@ -1176,7 +1185,6 @@ void latch_datapath_values() {
                 NEXT_LATCHES.REGS[i] = CURRENT_LATCHES.BACKUP_REGS[i];
             backingRegsUp = true;
         }
-
     }
 
     //last thing before the next cycle starts
