@@ -190,6 +190,7 @@ int EXCV; /* Exception vector register */
 int SSP; /* Initial value of system stack pointer */
 int SSR; /* Colton: best to separate SSP from SSR? */
 int PSR;
+int BACKUP_REGS[LC_3b_REGS]; /* backup register file lol. */
 
 } System_Latches;
 
@@ -683,6 +684,33 @@ void getPSRMode() {
     return mode;
 }
 
+
+int checkForExceptions() {
+
+    int vector;
+    bool isTrap = getOpcode() == 15;
+    bool isOOB = ((NEXT_LATCHES.MAR > 0x200) && (NEXT_LATCHES.MAR < 0x3000))
+    bool isUserMode = (getPSRMode() == 1);
+    bool isWordAccess = ( (CURRENT_LATCHES.STATE_NUMBER == 6) || (CURRENT_LATCHES.STATE_NUMBER == 7) );
+    bool isOddAddress = ( NEXT_LATCHES.MAR % 2 == 1);
+    int nextOpcode = ( (NEXT_LATCHES.IR & 0xF000) >> 12) & 0x0F;
+    bool isInvalidOpcode = ( (nextOpcode == 10) || (nextOpcode == 11) );
+
+    //check for protection exception:
+    if(!isTrap && isOOB && isUserMode)
+        vector = 0x02;
+
+    //check for unaligned:
+    else if(isWordAccess && isOddAddress)
+        vector = 0x03;
+
+    else if(isInvalidOpcode)
+        vector = 0x04;
+
+    return vector;
+}
+
+
 int *micro;
 void eval_micro_sequencer() {
   /* 
@@ -994,7 +1022,7 @@ void drive_bus() {
         DRIVER_COUNT++;
     }
     if(GetGATE_SSR(micro)){
-        BUS = Low16bits(CURRENT_LATCHES.SSR);
+        BUS = Low16bits(CURRENT_LATCHES.SSP);
         DRIVER_COUNT++;
     }
     if(GetGATE_PSR(micro)){
@@ -1013,6 +1041,7 @@ void drive_bus() {
 }
 
 
+bool backingRegsUp = true;
 void latch_datapath_values() {
 
   /* 
@@ -1075,8 +1104,10 @@ void latch_datapath_values() {
         int DestR;
         if(GetDRMUX(micro) == 0)
             DestR = (CURRENT_LATCHES.IR & 0x0E00) >> 9;
-        else
+        else if(GetDRMUX(micro) == 1)
             DestR = 7;
+        else
+            DestR = 6;
 
         NEXT_LATCHES.REGS[DestR] = BUS;
    }
@@ -1102,17 +1133,57 @@ void latch_datapath_values() {
             case 2:
                 NEXT_LATCHES.PC = MARMUX_IN_RIGHT;
                 break;
+            case 3:
+                NEXT_LATCHES.PC = CURRENT_LATCHES.PC - 2;
+                break;
         }
     }
 
+
     if(GetLD_SSR(micro){
-
+        if(GetSSRMUX(micro) == 0)
+            NEXT_LATCHES.SSP = CURRENT_LATCHES.SSP - 2;
+        else
+            NEXT_LATCHES.SSP = CURRENT_LATCHES.SSP + 2;
     }
+
+
     if(GetTOGL_PSR(micro){
+        if(getPSRMode() == 0)
+            NEXT_LATCHES.PSR = CURRENT_LATCHES.PSR | 0x8000;
+        else
+            NEXT_LATCHES.PSR = CURRENT_LATCHES.PSR & 0x7FFF;
 
     }
-    if(GetLD_PSR(micro){
 
-    }    
+
+    if(GetLD_PSR(micro){
+        NEXT_LATCHES.BUS = BUS;
+
+    }
+
+    //Info Exchanged between reg files?
+    if(GetTOGL_PSR(micro)){
+        if(backingRegsUp){
+            int i;
+            for(i=0; i < LC_3b_REGS; i++)
+                NEXT_LATCHES.BACKUP_REGS[i] = CURRENT_LATCHES.REGS[i];
+            backingRegsUp = false;
+        }
+        else {
+            int i;
+            for(i=0; i < LC_3b_REGS; i++)
+                NEXT_LATCHES.REGS[i] = CURRENT_LATCHES.BACKUP_REGS[i];
+            backingRegsUp = true;
+        }
+
+    }
+
+    //last thing before the next cycle starts
+    int vector = checkForExceptions();
+    if(vector == 1)
+        NEXT_LATCHES.INTV = vector;
+    else if(vector > 1)
+        NEXT_LATCHES.EXCV = vector;
 }
 
