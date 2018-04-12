@@ -148,6 +148,7 @@ int CONTROL_STORE[CONTROL_STORE_ROWS][CONTROL_STORE_BITS];
 
 #define WORDS_IN_MEM    0x08000 
 #define MEM_CYCLES      5
+#define VECTOR_TABLE    0x200;
 int MEMORY[WORDS_IN_MEM][2];
 
 /***************************************************************/
@@ -187,6 +188,7 @@ int STATE_NUMBER; /* Current State Number - Provided for debugging */
 int INTV; /* Interrupt vector register */
 int EXCV; /* Exception vector register */
 int SSP; /* Initial value of system stack pointer */
+int SSR; /* Colton: best to separate SSP from SSR? */
 int PSR;
 
 } System_Latches;
@@ -549,6 +551,8 @@ void initialize(char *ucode_filename, char *program_filename, int num_prog_files
     NEXT_LATCHES = CURRENT_LATCHES;
 
     RUN_BIT = TRUE;
+
+    //Colton: AM I MISSING ANY VALUES???
 }
 
 /***************************************************************/
@@ -805,6 +809,7 @@ int PC_IN;
 int ALU_IN;
 int SHF_IN;
 int MDR_IN;
+int VECTOR_IN;
 void eval_bus_drivers() {
 
   /* 
@@ -950,6 +955,12 @@ void eval_bus_drivers() {
     /* if(GetDATA_SIZE(micro) == 0) */
         /* MDR_IN = MDR_IN & 0x00FF; */  /* mask to 1 byte */
 
+    /* Value will hold address from the vector table */
+    if(CURRENT_LATCHES.EXCV != 0)
+        VECTOR_IN = VECTOR_TABLE + CURRENT_LATCHES.EXCV;
+    else
+        VECTOR_IN = VECTOR_TABLE + CURRENT_LATCHES.INTV;
+
 }
 
 int BUS;
@@ -982,6 +993,19 @@ void drive_bus() {
         BUS = Low16bits(MDR_IN);
         DRIVER_COUNT++;
     }
+    if(GetGATE_SSR(micro)){
+        BUS = Low16bits(CURRENT_LATCHES.SSR);
+        DRIVER_COUNT++;
+    }
+    if(GetGATE_PSR(micro)){
+        BUS = Low16bits(CURRENT_LATCHES.PSR);
+        DRIVER_COUNT++;
+    }
+    if(GetGATE_VECTOR(micro)){
+        BUS = Low16bits(VECTOR_IN);
+        DRIVER_COUNT++;
+    }
+
 
     if(DRIVER_COUNT > 1)
         printf("Too many drivers on the bus\n");
@@ -1080,5 +1104,15 @@ void latch_datapath_values() {
                 break;
         }
     }
+
+    if(GetLD_SSR(micro){
+
+    }
+    if(GetTOGL_PSR(micro){
+
+    }
+    if(GetLD_PSR(micro){
+
+    }    
 }
 
