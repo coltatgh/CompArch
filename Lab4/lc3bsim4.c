@@ -75,7 +75,7 @@ enum CS_BITS {
     PCMUX1, PCMUX0,
     DRMUX1, DRMUX0,
     SR1MUX1, SR1MUX0,
-    ADDR1MUX,               //35
+    ADDR1MUX,               
     ADDR2MUX1, ADDR2MUX0,
     MARMUX,
     SSRMUX,
@@ -91,7 +91,7 @@ enum CS_BITS {
 /* Functions to get at the control bits.                       */
 /***************************************************************/
 int GetIRD(int *x)           { return(x[IRD]); }
-int GetCOND(int *x)          { return((x[COND2] << 2) + (x[COND1] << 1) + x[COND0]); }  //Colt
+int GetCOND(int *x)          { return((x[COND2] << 2) + (x[COND1] << 1) + x[COND0]); }  
 int GetJ(int *x)             { return((x[J5] << 5) + (x[J4] << 4) +
                       (x[J3] << 3) + (x[J2] << 2) +
                       (x[J1] << 1) + x[J0]); }
@@ -103,9 +103,9 @@ int GetLD_REG(int *x)        { return(x[LD_REG]); }
 int GetLD_CC(int *x)         { return(x[LD_CC]); }
 int GetLD_PC(int *x)         { return(x[LD_PC]); }
 
-int GetLD_SSR(int *x)        { return(x[LD_SSR]);}      //Colt
-int GetTOGL_PSR(int *x)      { return(x[TOGL_PSR]);}    //Colt
-int GetLD_PSR(int *x)        { return(x[LD_PSR]);}      //Colt
+int GetLD_SSR(int *x)        { return(x[LD_SSR]);}      
+int GetTOGL_PSR(int *x)      { return(x[TOGL_PSR]);}    
+int GetLD_PSR(int *x)        { return(x[LD_PSR]);}      
 
 int GetGATE_PC(int *x)       { return(x[GATE_PC]); }
 int GetGATE_MDR(int *x)      { return(x[GATE_MDR]); }
@@ -113,9 +113,9 @@ int GetGATE_ALU(int *x)      { return(x[GATE_ALU]); }
 int GetGATE_MARMUX(int *x)   { return(x[GATE_MARMUX]); }
 int GetGATE_SHF(int *x)      { return(x[GATE_SHF]); }
 
-int GetGATE_SSR(int *x)      { return(x[GATE_SSR]);}            //Colt
-int GetGATE_PSR(int *x)      { return(x[GATE_PSR]);}            //Colt
-int GetGATE_VECTOR(int *x)   { return(x[GATE_VECTOR]);}         //Colt
+int GetGATE_SSR(int *x)      { return(x[GATE_SSR]);}            
+int GetGATE_PSR(int *x)      { return(x[GATE_PSR]);}            
+int GetGATE_VECTOR(int *x)   { return(x[GATE_VECTOR]);}         
 
 int GetPCMUX(int *x)         { return((x[PCMUX1] << 1) + x[PCMUX0]); }
 int GetDRMUX(int *x)         { return((x[DRMUX1] << 1) + x[DRMUX0]); }
@@ -124,7 +124,7 @@ int GetADDR1MUX(int *x)      { return(x[ADDR1MUX]); }
 int GetADDR2MUX(int *x)      { return((x[ADDR2MUX1] << 1) + x[ADDR2MUX0]); }
 int GetMARMUX(int *x)        { return(x[MARMUX]); }
 
-int GetSSRMUX(int *x)        { return(x[SSRMUX]);}              //Colt
+int GetSSRMUX(int *x)        { return(x[SSRMUX]);}              
 
 int GetALUK(int *x)          { return((x[ALUK1] << 1) + x[ALUK0]); }
 int GetMIO_EN(int *x)        { return(x[MIO_EN]); }
@@ -191,6 +191,9 @@ int SSP; /* Initial value of system stack pointer */
 int SSR; /* Colton: best to separate SSP from SSR? */
 int PSR;
 int BACKUP_REGS[LC_3b_REGS]; /* backup register file lol. */
+int BACK_N;
+int BACK_Z;
+int BACK_P;
 
 } System_Latches;
 
@@ -549,10 +552,11 @@ void initialize(char *ucode_filename, char *program_filename, int num_prog_files
     memcpy(CURRENT_LATCHES.MICROINSTRUCTION, CONTROL_STORE[INITIAL_STATE_NUMBER], sizeof(int)*CONTROL_STORE_BITS);
     CURRENT_LATCHES.SSP = 0x3000; /* Initial value of system stack pointer */
 
-    //Colton: AM I MISSING ANY VALUES???
-    CURRENT_LATCHES.PSR = 0x8002;   //Consider just changing to a single bit
+    /*Colton: AM I MISSING ANY VALUES???*/
+    CURRENT_LATCHES.PSR = 0x8002;   /*Consider just changing to a single bit*/
     CURRENT_LATCHES.EXCV = 0;
     CURRENT_LATCHES.INTV = 0;
+    CURRENT_LATCHES.REGS[6] = 0xFE00;
 
     NEXT_LATCHES = CURRENT_LATCHES;
 
@@ -701,15 +705,15 @@ int checkForExceptions() {
     int nextOpcode = ( (NEXT_LATCHES.IR & 0xF000) >> 12) & 0x0F;
     bool isInvalidOpcode = ( (nextOpcode == 10) || (nextOpcode == 11) );
 
-    //check for protection exception:
+    /*check for protection exception:*/
     if( !(isTrap && inVecTable) && isOOB && isUserMode )
         vector = 0x02;
 
-    //check for unaligned:
+    /*check for unaligned:*/
     else if(isWordAccess && isOddAddress)
         vector = 0x03;
 
-    else if(isInvalidOpcode)
+    else if(isInvalidOpcode && isUserMode)
         vector = 0x04;
 
     return vector;
@@ -780,7 +784,7 @@ void eval_micro_sequencer() {
             /* Addressing Mode */
             case 4:
                 if((CURRENT_LATCHES.INTV == 1) && (getPSRMode() == 1))
-                    nextState = microJ + 32;
+                    nextState = microJ + 17;
                 else
                     nextState = microJ;
                 break;
@@ -1194,31 +1198,37 @@ void latch_datapath_values() {
 
     }
 
-    //Info Exchanged between reg files?
+    /*Info Exchanged between reg files?*/
     if(GetTOGL_PSR(micro)){
         if(backingRegsUp){
             int i;
             for(i=0; i < LC_3b_REGS; i++)
                 NEXT_LATCHES.BACKUP_REGS[i] = CURRENT_LATCHES.REGS[i];
+            NEXT_LATCHES.BACK_N = CURRENT_LATCHES.N;
+            NEXT_LATCHES.BACK_Z = CURRENT_LATCHES.Z;
+            NEXT_LATCHES.BACK_P = CURRENT_LATCHES.P
             backingRegsUp = false;
         }
         else {
             int i;
             for(i=0; i < LC_3b_REGS; i++)
                 NEXT_LATCHES.REGS[i] = CURRENT_LATCHES.BACKUP_REGS[i];
+            NEXT_LATCHES.N = CURRENT_LATCHES.BACK_N;
+            NEXT_LATCHES.Z = CURRENT_LATCHES.BACK_Z;
+            NEXT_LATCHES.P = CURRENT_LATCHES.BACK_P;
             backingRegsUp = true;
         }
     }
 
-    //last thing before the next cycle starts
-    //Check for interrupts
+    /*last thing before the next cycle starts*/
+    /*Check for interrupts*/
     int iVector = 0;
     if(!INT_TRIGGERED)
         iVector = checkForInterrupts();
     if(iVector > 0)
         NEXT_LATCHES.INTV = iVector;
 
-    //check for exceptions
+    /*check for exceptions*/
     int eVector = checkForExceptions();
     int nextState;
     if((eVector > 1) && (!jumped34)) {
