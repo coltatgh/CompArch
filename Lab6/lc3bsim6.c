@@ -956,7 +956,7 @@ void SR_stage() {
   
 }
 
-int v_mem_ld_cc, v_mem_ld_reg, mem_pc_mux, trap_pc, target_pc, mem_drid
+int v_mem_ld_cc, v_mem_ld_reg, mem_pc_mux, trap_pc, target_pc, mem_drid;
 /************************* MEM_stage() *************************/
 int 
 void MEM_stage() {
@@ -1127,6 +1127,8 @@ int BR_logic(){
 
 
 /************************* AGEX_stage() *************************/
+
+int v_agex_ld_cc, v_agex_ld_reg, agex_drid;
 void AGEX_stage() {
 
   int ii, jj = 0;
@@ -1134,20 +1136,27 @@ void AGEX_stage() {
          signal */
 
   /* your code for AGEX stage goes here */
-  /* Calculate Address */
-
   int MEM_ADDRESS_in = ADDRESS_logic();
   int MEM_ALU_RESULT_in = ALU_logic();
 
+  /* Pass-back signals */
+  int agex_v = PS.AGEX_V;
+  v_agex_ld_cc = (Get_AGEX_LD_CC(PS.MEM_CS) && agex_v);
+  v_agex_ld_reg = (Get_AGEX_LD_REG(PS.MEM_CS) && agex_v);
+  v_agex_br_stall = (Get_AGEX_BR_STALL(PS.MEM_CS) && agex_v);
+  agex_drid = PS.AGEX_DRID;
 
 
-
-  
-
+  LD_MEM = !(v_mem_br_stall || mem_stall);
   if (LD_MEM) {
     /* Your code for latching into MEM latches goes here */
-    
-
+    NEW_PS.MEM_ADDRESS = MEM_ADDRESS_in;
+    NEW_PS.MEM_NPC = PS.AGEX_NPC;
+    NEW_PS.MEM_CC = PS.AGEX_CC;
+    NEW_PS.MEM_ALU_RESULT = MEM_ALU_RESULT_in;
+    NEW_PS.MEM_IR = PS.AGEX_IR;
+    NEW_PS.MEM_DRID = agex_drid;
+    NEW_PS.MEM_V = PS.AGEX_V;
 
     /* The code below propagates the control signals from AGEX.CS latch
        to MEM.CS latch. */
@@ -1156,7 +1165,6 @@ void AGEX_stage() {
     }
   }
 }
-
 
 int ADDRESS_logic() {
 
@@ -1214,11 +1222,21 @@ int ALU_logic() {
     SR2_MUX_out = signExtend(PS.AGEX_IR & 0x01F, 5);
   }
 
-  /*SHF */
-  bool isRight = (PS.AGEX_IR & 0x010) >> 4;
-  bool isArithmetic = ();
+  /* SHF */
+  int isRight = (PS.AGEX_IR & 0x010) >> 4;
+  int isArithmetic = (PS.AGEX_IR & 0x020) >> 4;
+  int bitShifts = PS.AGEX_IR & 0x0F;
   int SHF_out;
-
+  if(!isRight){
+    SHF_out = PS.AGEX_SR1 << bitShifts;
+  }
+  else if(!isArithmetic){
+    SHF_out = PS.AGEX_SR1 >> bitShifts;
+  }
+  else{
+    SHF_out = PS.AGEX_SR1 >> bitShifts;
+    SHF_out = signExtend(SHF_out, 16 - bitShifts);
+  }
 
   /* ALU */
   int ALU_in_A = PS.AGEX_SR1;
@@ -1238,12 +1256,16 @@ int ALU_logic() {
     ALU_out = ALU_in_B;
   }
 
+  int result;
+  if(Get_ALU_RESULTMUX(PS.AGEX_CS) == 0){
+    result = ALU_out;
+  }else{
+    result = SHF_out;
+  }
 
-
-
-
-
+  return result;
 }
+
 
 /************************* DE_stage() *************************/
 void DE_stage() {
@@ -1256,11 +1278,90 @@ void DE_stage() {
           LD.AGEX signal */
 
   /* your code for DE stage goes here */
+  /* SR1_ID */
+  int SR1_ID = maskAndShiftDown(PS.DE_IR, 6, 8);
 
-  
+  /* SR2_ID_MUX */
+  int SR2_ID_in0 = PS.DE_IR & 0x07;
+  int SR2_ID_in1 = maskAndShiftDown(PS.DE_IR, 9, 11);
+  int opcode = maskAndShiftDown(PS.DE_IR, 15, 12);
+  int SR2_ID;
+  if(opcode == 3 || opcode == 7){
+    SR2_ID = SR2_ID_in1;
+  } else {
+    SR2_ID = SR2_ID_in0;
+  }
 
+  /* CONTROL STORE */
+  int bit11 = (PS.DE_IR & 0x0800) >> 11;
+  int bit5 = (PS.DE_IR & 0x0020) >> 5;
+  int CS_index = (opcode << 2) + (bit11 << 1) + bit5;
+  int CS_ROW[NUM_CONTROL_STORE_BITS] = CONTROL_STORE[CS_index];
 
+  /* DE.BR.STALL */
+  if(Get_DE_BR_STALL(CS_ROW) && PS.DE_V){
+    v_de_br_stall = 1;
+  }
 
+  /* DEPENDENCY CHECK */
+  int haveDep = 0;
+  if(PS.DE_V){
+    if(Get_SR1_NEEDED(CS_ROW)){
+      if( v_agex_ld_reg &&  (SR1_ID == agex_drid) ){
+        haveDep = 1;
+      }
+      else if( v_mem_ld_reg && (SR1_ID == mem_drid) ){
+        haveDep = 1;
+      }
+      else if( v_sr_ld_reg && (SR1_ID == sr_reg_id ) ){
+        haveDep = 1;
+      }
+    }
+    else if(Get_SR2_NEEDED(CS_ROW)){
+      if( v_agex_ld_reg &&  (SR2_ID == agex_drid) ){
+        haveDep = 1;
+      }
+      else if( v_mem_ld_reg && (SR2_ID == mem_drid) ){
+        haveDep = 1;
+      }
+      else if( v_sr_ld_reg && (SR2_ID == sr_reg_id ) ){
+        haveDep = 1;
+      }
+    }
+    else if(Get_BR_OP(CS_ROW)){
+      if( v_agex_ld_cc || v_mem_ld_cc || v_sr_ld_cc){
+        haveDep = 1;
+      }
+    }
+  }
+
+  if(haveDep){
+    dep_stall = 1;
+  }
+
+  /* OTHER AGEX VALUES */
+  int AGEX_SR1_in = REGS[SR1_ID];
+  int AGEX_SR2_in = REGS[SR2_ID];
+  int AGEX_CC_in = (N << 2) + (Z << 1) + P;
+  int AGEX_DRID_in;
+  if(Get_DRMUX(CS_ROW) == 0){
+    AGEX_DRID_in = maskAndShiftDown(PS.DE_IR, 9, 11);
+  } else {
+    AGEX_DRID_in = 7;
+  }
+
+  /* WRITE NEW VALUES */
+  if(v_sr_ld_reg){
+    REGS[PS.SR_DRID] = sr_reg_data;
+  }
+
+  if(v_sr_ld_cc){
+    N = sr_n;
+    Z = sr_z;
+    P = sr_p;
+  }
+
+  /* HERE I AM */
   if (LD_AGEX) {
     /* Your code for latching into AGEX latches goes here */
     
