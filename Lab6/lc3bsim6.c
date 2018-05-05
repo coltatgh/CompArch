@@ -1354,19 +1354,24 @@ void DE_stage() {
   if(v_sr_ld_reg){
     REGS[PS.SR_DRID] = sr_reg_data;
   }
-
   if(v_sr_ld_cc){
     N = sr_n;
     Z = sr_z;
     P = sr_p;
   }
 
-  /* HERE I AM */
+  LD_AGEX = !v_agex_br_stall;
+  int AGEX_V_in =(PS.DE_V && !dep_stall);
   if (LD_AGEX) {
     /* Your code for latching into AGEX latches goes here */
-    
-
-
+    NEW_PS.AGEX_NPC = PS.DE_NPC;
+    NEW_PS.AGEX_CS = CS_ROW;
+    NEW_PS.AGEX_IR = PS.DE_IR;
+    NEW_PS.AGEX_SR1 = AGEX_SR1_in;
+    NEW_PS.AGEX_SR2 = AGEX_SR2_in;
+    NEW_PS.AGEX_CC = AGEX_CC_in;
+    NEW_PS.AGEX_DRID = AGEX_DRID_in;
+    NEW_PS.AGEX_V = AGEX_V_in;
 
     /* The code below propagates the control signals from the CONTROL
        STORE to the AGEX.CS latch. */
@@ -1383,8 +1388,30 @@ void DE_stage() {
 void FETCH_stage() {
 
   /* your code for FETCH stage goes here */
+  /* PC_MUX */
+  int npc;
+  if(mem_pc_mux == 0){
+    npc = PC + 2;
+  }
+  else if(mem_pc_mux == 1){
+    npc = target_pc;
+  }
+  else if(mem_pc_mux == 2){
+    npc = trap_pc;
+  }
 
+  int LD_PC = !(v_de_br_stall || v_agex_br_stall || v_mem_br_stall || dep_stall || mem_stall);
 
+  int instruct;
+  int i_ready;
+  icache_access(PC, &instruct, &i_ready);
+
+  int LD_DE = (!(dep_stall || v_de_br_stall));
+  if(LD_DE){
+    NEW_PS.DE_NPC = (npc && 0xFFFF);
+    NEW_PS.DE_IR = (instruct && 0xFFFF);
+    NEW_PS.DE_V = i_ready;
+  }
 }  
 
 
