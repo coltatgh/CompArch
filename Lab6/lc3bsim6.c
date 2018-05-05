@@ -12,9 +12,12 @@
 /*                                                             */
 /***************************************************************/
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 /***************************************************************/
 /*                                                             */
@@ -956,9 +959,9 @@ void SR_stage() {
   
 }
 
-int v_mem_ld_cc, v_mem_ld_reg, mem_pc_mux, trap_pc, target_pc, mem_drid;
+
 /************************* MEM_stage() *************************/
-int 
+int v_mem_ld_cc, v_mem_ld_reg, mem_pc_mux, trap_pc, target_pc, mem_drid;
 void MEM_stage() {
 
   int ii,jj = 0;
@@ -970,16 +973,16 @@ void MEM_stage() {
   int dc_en = Get_DCACHE_EN(PS.MEM_CS);
   int mem_v = PS.MEM_V;
   bool v_dc_en = (dc_en && mem_v);
-  int dc_out;  /* how to use this */
+  int dc_out;
   int dc_r;
   if(v_dc_en){
-    dc_r = DC_logic(writeEn, memData, dc_out);
+    dc_r = DC_logic(writeEn, memData, &dc_out);
   }
   else{
     dc_out = 0;
   }
 
-  int SR_DATA_in = DATA2_logic(*dc_out);
+  int SR_DATA_in = DATA2_logic(dc_out);
 
   /* Stall Calculations */
   mem_stall = (v_dc_en && dc_r);
@@ -997,7 +1000,7 @@ void MEM_stage() {
   target_pc = PS.MEM_ADDRESS;
   mem_drid = PS.MEM_DRID;
 
-  SR.V_in = !mem_stall;
+  int SR_V_in = !mem_stall;
 
   
   /* The code below propagates the control signals from MEM.CS latch
@@ -1013,7 +1016,7 @@ void MEM_stage() {
   NEW_PS.SR_ALU_RESULT = PS.MEM_ALU_RESULT;
   NEW_PS.SR_IR = PS.MEM_IR;
   NEW_PS.SR_DRID = PS.MEM_DRID;
-  NEW_PS.SR_V = SR.V_in;
+  NEW_PS.SR_V = SR_V_in;
 }
 
 int DATA_logic(){
@@ -1063,16 +1066,16 @@ int WE_logic(){
   return WE_out;
 }
 
-int DC_logic(int WE, int data, int read_word){
+int DC_logic(int WE, int data, int *read_word){
   
   int mem_addr = PS.MEM_ADDRESS;
-  int *dcache_r;
+  int dcache_r;
   int mem_w0 = WE & 0x01;
   int mem_w1 = (WE & 0x02) >> 1;
 
   int data_out = 0;
-
-  dcache_access(mem_addr, &read_word, data, dcache_r, mem_w0, mem_w1);
+  /*dcache_access(int dcache_addr, int *read_word, int write_word, int *dcache_r, int mem_w0, int mem_w1)*/
+  dcache_access(mem_addr, read_word, data, &dcache_r, mem_w0, mem_w1);
 
   return dcache_r;
 }
@@ -1116,7 +1119,7 @@ int BR_logic(){
   else if(Get_UNCOND_OP(PS.MEM_CS)){
     result = 1;
   }
-  else if(Get_TRAP_OP(PS>MEM_CS)){
+  else if(Get_TRAP_OP(PS.MEM_CS)){
     result = 2;
   }else{
     result = 0;
@@ -1147,7 +1150,7 @@ void AGEX_stage() {
   agex_drid = PS.AGEX_DRID;
 
 
-  LD_MEM = !(v_mem_br_stall || mem_stall);
+  LD_MEM = !mem_stall;
   if (LD_MEM) {
     /* Your code for latching into MEM latches goes here */
     NEW_PS.MEM_ADDRESS = MEM_ADDRESS_in;
@@ -1295,8 +1298,8 @@ void DE_stage() {
   /* CONTROL STORE */
   int bit11 = (PS.DE_IR & 0x0800) >> 11;
   int bit5 = (PS.DE_IR & 0x0020) >> 5;
-  int CS_index = (opcode << 2) + (bit11 << 1) + bit5;
-  int CS_ROW[NUM_CONTROL_STORE_BITS] = CONTROL_STORE[CS_index];
+  CONTROL_STORE_ADDRESS = (opcode << 2) + (bit11 << 1) + bit5;
+  int *CS_ROW = CONTROL_STORE[CONTROL_STORE_ADDRESS];
 
   /* DE.BR.STALL */
   if(Get_DE_BR_STALL(CS_ROW) && PS.DE_V){
@@ -1360,12 +1363,11 @@ void DE_stage() {
     P = sr_p;
   }
 
-  LD_AGEX = !v_agex_br_stall;
+  LD_AGEX = !mem_stall;
   int AGEX_V_in =(PS.DE_V && !dep_stall);
   if (LD_AGEX) {
     /* Your code for latching into AGEX latches goes here */
     NEW_PS.AGEX_NPC = PS.DE_NPC;
-    NEW_PS.AGEX_CS = CS_ROW;
     NEW_PS.AGEX_IR = PS.DE_IR;
     NEW_PS.AGEX_SR1 = AGEX_SR1_in;
     NEW_PS.AGEX_SR2 = AGEX_SR2_in;
@@ -1400,20 +1402,28 @@ void FETCH_stage() {
     npc = trap_pc;
   }
 
-  int LD_PC = !(v_de_br_stall || v_agex_br_stall || v_mem_br_stall || dep_stall || mem_stall);
-
   int instruct;
   int i_ready;
   icache_access(PC, &instruct, &i_ready);
 
-  int LD_DE = (!(dep_stall || v_de_br_stall));
+  int LD_PC = (!(v_de_br_stall || v_agex_br_stall || v_mem_br_stall || dep_stall || mem_stall) && (i_ready));
+  int LD_DE;
+  int DE_V_in;
+
+  if(dep_stall || mem_stall){
+    LD_DE = 0;
+  }
+  else if(v_de_br_stall || v_agex_br_stall || v_mem_br_stall || !i_ready){
+    LD_DE = 1;
+    DE_V_in = 0;
+  }
+
   if(LD_DE){
     NEW_PS.DE_NPC = (npc && 0xFFFF);
     NEW_PS.DE_IR = (instruct && 0xFFFF);
     NEW_PS.DE_V = i_ready;
   }
+
+  PC = LD_PC;
 }  
-
-
-
 
